@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, CalendarDays, Eye, LogIn, PlusCircle, Sparkles } from 'lucide-react'
+import { ArrowRight, Bookmark, CalendarDays, Eye, LogIn, PlusCircle, Sparkles } from 'lucide-react'
 import { getCurrentSession } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import type { BlogPost } from '../lib/types'
@@ -25,6 +25,7 @@ export function HomePage() {
   )
   const [posts, setPosts] = useState<BlogPost[]>([])
   const [views, setViews] = useState<Record<string, number>>({})
+  const [favorites, setFavorites] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -36,6 +37,16 @@ export function HomePage() {
       if (!active) return
 
       setSession(currentSession)
+
+      if (currentSession?.user?.id) {
+        const { data: favData } = await supabase
+          .from('favorites')
+          .select('post_id')
+          .eq('user_id', currentSession.user.id)
+        if (favData) {
+          setFavorites(new Set(favData.map((f: { post_id: string }) => f.post_id)))
+        }
+      }
 
       setLoading(true)
       const { data, error: fetchError } = await supabase
@@ -87,6 +98,23 @@ export function HomePage() {
       active = false
     }
   }, [])
+
+  async function toggleFavorite(postId: string) {
+    if (!session?.user?.id) return
+
+    const isFav = favorites.has(postId)
+    if (isFav) {
+      await supabase.from('favorites').delete().eq('user_id', session.user.id).eq('post_id', postId)
+      setFavorites((prev) => {
+        const next = new Set(prev)
+        next.delete(postId)
+        return next
+      })
+    } else {
+      await supabase.from('favorites').insert({ user_id: session.user.id, post_id: postId })
+      setFavorites((prev) => new Set(prev).add(postId))
+    }
+  }
 
   // Show loading state while checking auth
   if (session === undefined) {
@@ -198,6 +226,21 @@ export function HomePage() {
                 ) : (
                   <div className="article-image-fallback" />
                 )}
+                <button
+                  className={`bookmark-btn ${favorites.has(post.id) ? 'active' : ''}`}
+                  onClick={() => {
+                    if (!session?.user?.id) {
+                      if (window.confirm('Sign in or create an account to bookmark posts. Go to sign in?')) {
+                        window.location.href = '/login'
+                      }
+                      return
+                    }
+                    toggleFavorite(post.id)
+                  }}
+                  aria-label={favorites.has(post.id) ? 'Remove from favorites' : 'Add to favorites'}
+                >
+                  <Bookmark size={16} fill={favorites.has(post.id) ? 'currentColor' : 'none'} />
+                </button>
                 <div className="article-card-body">
                   <div className="meta-row">
                     <span>

@@ -1,10 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
-import { LogOut, Save, UserRound } from 'lucide-react'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { Bookmark, LogOut, Save, UserRound } from 'lucide-react'
 import { SectionHeading } from '../components/SiteLayout'
 import { getCurrentSession, getProfileById } from '../lib/auth'
 import { supabase } from '../lib/supabase'
-import type { Profile } from '../lib/types'
+import type { BlogPost, Profile } from '../lib/types'
 
 export function ProfilePage() {
   const navigate = useNavigate()
@@ -15,6 +15,7 @@ export function ProfilePage() {
   const [formData, setFormData] = useState<Profile | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [favorites, setFavorites] = useState<BlogPost[]>([])
 
   useEffect(() => {
     let active = true
@@ -40,6 +41,24 @@ export function ProfilePage() {
       setSessionUserId(session.user.id)
       setProfile(currentProfile)
       setFormData(currentProfile)
+
+      const { data: favData } = await supabase
+        .from('favorites')
+        .select('post_id')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: false })
+
+      if (favData && favData.length > 0) {
+        const postIds = favData.map((f) => f.post_id).filter(Boolean)
+        const { data: postsData } = await supabase
+          .from('blog_posts')
+          .select('*')
+          .in('id', postIds)
+        if (postsData) {
+          setFavorites(postsData as BlogPost[])
+        }
+      }
+
       setChecking(false)
     }
 
@@ -216,6 +235,36 @@ export function ProfilePage() {
               )}
             </div>
           ) : null}
+        </section>
+
+        <section className="panel">
+          <div className="panel-header">
+            <h2>
+              <Bookmark size={20} />
+              Saved Posts
+            </h2>
+          </div>
+          {favorites.length === 0 ? (
+            <p className="muted">No saved posts yet. Bookmark posts from articles to see them here.</p>
+          ) : (
+            <div className="favorites-grid">
+              {favorites.map((post) => (
+                <div key={post.id} className="favorite-card">
+                  {post.featured_image ? (
+                    <img src={post.featured_image} alt={post.title} />
+                  ) : (
+                    <div className="favorite-image-fallback" />
+                  )}
+                  <div className="favorite-card-body">
+                    <h3>{post.title}</h3>
+                    <Link to={`/post/${post.slug}`} className="primary-button">
+                      Read
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="panel danger-section">

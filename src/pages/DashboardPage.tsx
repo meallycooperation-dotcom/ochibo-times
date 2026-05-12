@@ -122,6 +122,7 @@ export function DashboardPage() {
     const { data, error } = await supabase
       .from('blog_posts')
       .select('*')
+      .eq('author_id', sessionUserId)
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -135,7 +136,7 @@ export function DashboardPage() {
 
   async function loadAnalytics() {
     const [postsResult, viewsResult] = await Promise.all([
-      supabase.from('blog_posts').select('*').order('created_at', {
+      supabase.from('blog_posts').select('*').eq('author_id', sessionUserId).order('created_at', {
         ascending: false,
       }),
       supabase.from('page_views').select('post_id'),

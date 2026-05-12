@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { LogOut, Save, UserRound } from 'lucide-react'
-import { SectionHeading, EmptyState } from '../components/SiteLayout'
+import { SectionHeading } from '../components/SiteLayout'
 import { getCurrentSession, getProfileById } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import type { Profile } from '../lib/types'

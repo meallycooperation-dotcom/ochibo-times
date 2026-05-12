@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { LogIn } from 'lucide-react'
 import { AuthShell } from '../components/AuthShell'
-import { getCurrentSession, getProfileById, isAdminSession } from '../lib/auth'
+import { getCurrentSession, isAdminSession } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 
 export function LoginPage() {

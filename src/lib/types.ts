@@ -27,3 +27,26 @@ export interface PageView {
   post_id: string | null
   viewed_at: string
 }
+
+export interface Book {
+  id: string
+  title: string
+  description: string | null
+  cover_image: string | null
+  slug: string
+  published: boolean
+  author_id: string | null
+  created_at: string
+  updated_at: string | null
+}
+
+export interface BookChapter {
+  id: string
+  book_id: string
+  chapter_number: number
+  title: string
+  content: string
+  image_url: string | null
+  created_at: string
+  updated_at: string | null
+}

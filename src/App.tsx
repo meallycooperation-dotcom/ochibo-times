@@ -1,6 +1,7 @@
 import './App.css'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { SiteLayout } from './components/SiteLayout'
+import { BookPage } from './pages/BookPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { HomePage } from './pages/HomePage'
 import { LoginPage } from './pages/LoginPage'
@@ -16,6 +17,7 @@ export default function App() {
         <Route element={<SiteLayout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/post/:slug" element={<PostPage />} />
+          <Route path="/book/:slug" element={<BookPage />} />
           <Route path="/profile" element={<ProfilePage />} />
         </Route>
 

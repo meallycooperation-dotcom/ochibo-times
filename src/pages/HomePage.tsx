@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { ArrowRight, Bookmark, CalendarDays, Eye, LogIn, PlusCircle, Sparkles } from 'lucide-react'
 import { getCurrentSession } from '../lib/auth'
 import { supabase } from '../lib/supabase'
-import type { BlogPost } from '../lib/types'
+import type { BlogPost, Book } from '../lib/types'
 import { ArticleBadge, EmptyState, SectionHeading } from '../components/SiteLayout'
 
 function formatDate(date: string) {
@@ -26,6 +26,7 @@ export function HomePage() {
   const [posts, setPosts] = useState<BlogPost[]>([])
   const [views, setViews] = useState<Record<string, number>>({})
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
+  const [books, setBooks] = useState<Book[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -86,6 +87,16 @@ export function HomePage() {
           }
         } else {
           setViews({})
+        }
+
+        const { data: booksData } = await supabase
+          .from('books')
+          .select('*')
+          .eq('published', true)
+          .order('created_at', { ascending: false })
+
+        if (booksData) {
+          setBooks(booksData as Book[])
         }
       }
 
@@ -261,6 +272,35 @@ export function HomePage() {
           </div>
         )}
       </section>
+
+      {books.length > 0 && (
+        <section className="content-section">
+          <SectionHeading
+            eyebrow="Library"
+            title="Books"
+            description="Explore our collection of books."
+          />
+          <div className="article-grid">
+            {books.map((book) => (
+              <article key={book.id} className="article-card">
+                {book.cover_image ? (
+                  <img src={book.cover_image} alt={book.title} />
+                ) : (
+                  <div className="article-image-fallback" />
+                )}
+                <div className="article-card-body">
+                  <h3>{book.title}</h3>
+                  <p>{book.description || 'No description available.'}</p>
+                  <Link to={`/book/${book.slug}`} className="text-link">
+                    View book
+                    <ArrowRight size={16} />
+                  </Link>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   )
 }

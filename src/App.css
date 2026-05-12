@@ -417,6 +417,80 @@
   font-size: 1.05rem;
 }
 
+.chapter-container {
+  display: grid;
+  gap: 16px;
+}
+
+.chapter-select-label {
+  display: grid;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.chapter-select {
+  width: 100%;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.74);
+  color: var(--text);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.chapter-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(180, 95, 6, 0.15);
+}
+
+.chapter-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: rgba(180, 95, 6, 0.15);
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 600;
+  width: fit-content;
+}
+
+.chapter-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chapter-header h2 {
+  margin: 0;
+  font-family: Georgia, 'Times New Roman', serif;
+}
+
+.chapter-image {
+  width: 100%;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+}
+
+.back-to-top {
+  margin-top: 32px;
+  padding: 12px 24px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.74);
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+  width: 100%;
+}
+
+.back-to-top:hover {
+  background: rgba(255, 255, 255, 0.9);
+  transform: translateY(-2px);
+}
+
 .auth-shell {
   min-height: 100vh;
   display: grid;
@@ -647,8 +721,58 @@
   margin-top: auto;
 }
 
+.dashboard-card-image {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+.dashboard-card-thumb {
+  width: 100%;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+
 .small {
   padding: 10px 14px;
+}
+
+.section-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 20px 0;
+}
+
+.chapters-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.chapters-header h3 {
+  margin: 0;
+  font-family: Georgia, 'Times New Roman', serif;
+}
+
+.chapter-block {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 16px;
+  margin-bottom: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.chapter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  color: var(--muted);
 }
 
 .checkbox-line {

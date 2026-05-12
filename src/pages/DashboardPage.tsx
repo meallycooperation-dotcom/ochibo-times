@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import {
   BarChart3,
+  BookOpen,
   FileText,
   Home,
   LogOut,
@@ -15,9 +16,10 @@ import {
 import { SectionHeading, EmptyState } from '../components/SiteLayout'
 import { getCurrentSession, getProfileById, isAdminSession } from '../lib/auth'
 import { supabase } from '../lib/supabase'
-import type { BlogPost, Profile } from '../lib/types'
+import type { BlogPost, Book, Profile } from '../lib/types'
+import { BooksEditor } from './BooksEditor'
 
-type Tab = 'posts' | 'new-post' | 'analytics' | 'profile'
+type Tab = 'posts' | 'new-post' | 'books' | 'new-book' | 'analytics' | 'profile'
 
 type PostFormState = {
   id: string
@@ -67,6 +69,9 @@ export function DashboardPage() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [loadingPosts, setLoadingPosts] = useState(false)
   const [savingPost, setSavingPost] = useState(false)
+  const [books, setBooks] = useState<Book[]>([])
+  const [loadingBooks, setLoadingBooks] = useState(false)
+  const [editingBook, setEditingBook] = useState<Book | null>(null)
 
   useEffect(() => {
     let active = true
@@ -156,6 +161,35 @@ export function DashboardPage() {
     setViews((viewsResult.data as { post_id: string | null }[]) ?? [])
   }
 
+  async function loadBooks() {
+    setLoadingBooks(true)
+    const { data, error } = await supabase
+      .from('books')
+      .select('*')
+      .eq('author_id', sessionUserId)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      setStatusMessage(error.message)
+      setBooks([])
+    } else {
+      setBooks((data as Book[]) ?? [])
+    }
+    setLoadingBooks(false)
+  }
+
+  async function deleteBook(id: string) {
+    const confirmed = window.confirm('Are you sure you want to delete this book?')
+    if (!confirmed) return
+
+    const { error } = await supabase.from('books').delete().eq('id', id)
+    if (error) {
+      setStatusMessage(error.message)
+    } else {
+      setBooks((prev) => prev.filter((b) => b.id !== id))
+    }
+  }
+
   const analytics = useMemo(() => {
     const counts = new Map<string, number>()
     views.forEach((view) => {
@@ -188,6 +222,17 @@ export function DashboardPage() {
       published: post.published,
     })
     setActiveTab('new-post')
+  }
+
+  function startNewBook() {
+    setEditingBook(null)
+    setActiveTab('new-book')
+    setStatusMessage(null)
+  }
+
+  function editBook(book: Book) {
+    setEditingBook(book)
+    setActiveTab('new-book')
   }
 
   async function savePost(event: FormEvent<HTMLFormElement>) {
@@ -303,6 +348,14 @@ export function DashboardPage() {
         <button className={activeTab === 'new-post' ? 'sidebar-item active' : 'sidebar-item'} onClick={startNewPost}>
           <PlusCircle size={16} />
           New post
+        </button>
+        <button className={activeTab === 'books' ? 'sidebar-item active' : 'sidebar-item'} onClick={() => { setActiveTab('books'); void loadBooks() }}>
+          <BookOpen size={16} />
+          Books
+        </button>
+        <button className={activeTab === 'new-book' ? 'sidebar-item active' : 'sidebar-item'} onClick={() => { setActiveTab('new-book'); setStatusMessage(null) }}>
+          <PlusCircle size={16} />
+          New book
         </button>
         <button className={activeTab === 'analytics' ? 'sidebar-item active' : 'sidebar-item'} onClick={() => setActiveTab('analytics')}>
           <BarChart3 size={16} />
@@ -475,6 +528,65 @@ export function DashboardPage() {
               </div>
             </form>
           </section>
+        ) : null}
+
+        {activeTab === 'books' ? (
+          <section className="panel">
+            <div className="panel-header">
+              <h2>Books</h2>
+              <button className="primary-button" onClick={startNewBook}>
+                <PlusCircle size={16} />
+                New book
+              </button>
+            </div>
+
+            {loadingBooks ? (
+              <div className="dashboard-loading">
+                <div className="loading-card" />
+              </div>
+            ) : books.length === 0 ? (
+              <EmptyState
+                title="No books yet"
+                description="Create your first book to get started."
+                action={
+                  <button className="primary-button" onClick={startNewBook}>
+                    <PlusCircle size={16} />
+                    Create book
+                  </button>
+                }
+              />
+            ) : (
+              <div className="dashboard-grid">
+                {books.map((book) => (
+                  <article key={book.id} className="dashboard-card">
+                    <div className="card-topline">
+                      <span>{book.published ? 'Published' : 'Draft'}</span>
+                      <span>{formatDate(book.created_at)}</span>
+                    </div>
+                    {book.cover_image && (
+                      <img src={book.cover_image} alt={book.title} className="dashboard-card-thumb" />
+                    )}
+                    <h3>{book.title}</h3>
+                    <p>{book.description || 'No description'}</p>
+                    <div className="card-actions">
+                      <button className="secondary-button small" onClick={() => editBook(book)}>
+                        <PencilLine size={16} />
+                        Edit
+                      </button>
+                      <button className="danger-button small" onClick={() => deleteBook(book.id)}>
+                        <Trash2 size={16} />
+                        Delete
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        ) : null}
+
+        {activeTab === 'new-book' ? (
+          <BooksEditor sessionUserId={sessionUserId} editingBook={editingBook} onSave={() => { setActiveTab('books'); setEditingBook(null) }} />
         ) : null}
 
         {activeTab === 'analytics' ? (

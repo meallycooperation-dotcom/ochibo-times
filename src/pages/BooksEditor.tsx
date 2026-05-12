@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, type FormEvent } from 'react'
+import { useState, useEffect, type FormEvent } from 'react'
 import { ArrowLeft, Plus, Save, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { Book, BookChapter } from '../lib/types'
@@ -53,22 +53,24 @@ interface BooksEditorProps {
 }
 
 export function BooksEditor({ sessionUserId, editingBook, onSave }: BooksEditorProps) {
+  const [bookForm, setBookForm] = useState<BookFormState>(emptyBookForm)
   const [chapters, setChapters] = useState<ChapterFormState[]>([{ ...emptyChapter }])
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const bookForm = useMemo<BookFormState>(() => {
+  useEffect(() => {
     if (editingBook) {
-      return {
+      setBookForm({
         id: editingBook.id,
         title: editingBook.title,
         slug: editingBook.slug,
         description: editingBook.description ?? '',
         cover_image: editingBook.cover_image ?? '',
         published: editingBook.published,
-      }
+      })
+    } else {
+      setBookForm(emptyBookForm)
     }
-    return emptyBookForm
   }, [editingBook])
 
   useEffect(() => {
@@ -77,11 +79,13 @@ export function BooksEditor({ sessionUserId, editingBook, onSave }: BooksEditorP
       return
     }
 
+    const bookId = editingBook.id
+
     async function load() {
       const { data } = await supabase
         .from('book_chapters')
         .select('*')
-        .eq('book_id', editingBook.id)
+        .eq('book_id', bookId)
         .order('chapter_number', { ascending: true })
 
       if (data && data.length > 0) {

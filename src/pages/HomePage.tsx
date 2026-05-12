@@ -227,17 +227,13 @@ export function HomePage() {
                   <div className="article-image-fallback" />
                 )}
                 <button
-                  className={`bookmark-btn ${favorites.has(post.id) ? 'active' : ''}`}
+                  className={`bookmark-btn ${favorites.has(post.id) ? 'active' : ''} ${!session?.user?.id ? 'disabled' : ''}`}
                   onClick={() => {
-                    if (!session?.user?.id) {
-                      if (window.confirm('Sign in or create an account to bookmark posts. Go to sign in?')) {
-                        window.location.href = '/login'
-                      }
-                      return
-                    }
+                    if (!session?.user?.id) return
                     toggleFavorite(post.id)
                   }}
                   aria-label={favorites.has(post.id) ? 'Remove from favorites' : 'Add to favorites'}
+                  disabled={!session?.user?.id}
                 >
                   <Bookmark size={16} fill={favorites.has(post.id) ? 'currentColor' : 'none'} />
                 </button>

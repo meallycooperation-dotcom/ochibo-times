@@ -354,6 +354,11 @@
   color: var(--text);
 }
 
+.bookmark-btn.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .article-card-body {
   display: grid;
   gap: 12px;

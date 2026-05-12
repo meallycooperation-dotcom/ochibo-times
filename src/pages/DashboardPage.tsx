@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import {
   BarChart3,
   FileText,
+  Home,
   LogOut,
   PencilLine,
   PlusCircle,
@@ -288,6 +289,11 @@ export function DashboardPage() {
           <strong>Ochibo</strong>
           <span>Admin studio</span>
         </div>
+
+        <button className="sidebar-item" onClick={() => navigate('/')}>
+          <Home size={16} />
+          Home
+        </button>
 
         <button className={activeTab === 'posts' ? 'sidebar-item active' : 'sidebar-item'} onClick={() => setActiveTab('posts')}>
           <FileText size={16} />

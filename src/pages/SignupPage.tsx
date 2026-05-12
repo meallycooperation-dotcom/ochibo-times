@@ -74,7 +74,7 @@ export function SignupPage() {
             type="text"
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="B Ochieng"
+            placeholder="Brian Ochieng"
             required
           />
         </label>

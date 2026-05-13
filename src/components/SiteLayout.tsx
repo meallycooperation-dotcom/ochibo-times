@@ -4,7 +4,6 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { ArrowRight, BookOpen, Home, LayoutDashboard, Search, User, X } from 'lucide-react'
 import { getCurrentSession, getProfileById } from '../lib/auth'
 import { supabase } from '../lib/supabase'
-import type { BlogPost, Book } from '../lib/types'
 import { useSearchContext } from '../context/SearchContext'
 
 type SearchResult = {
@@ -93,28 +92,32 @@ export function SiteLayout() {
     const results: SearchResult[] = []
 
     if (postsResult.data) {
-      postsResult.data.forEach((post: Partial<BlogPost>) => {
-        results.push({
-          id: post.id,
-          type: 'post',
-          title: post.title,
-          slug: post.slug,
-          image: post.featured_image ?? null,
-          description: post.excerpt ?? null,
-        })
+      postsResult.data.forEach((post) => {
+        if (post.id && post.title && post.slug) {
+          results.push({
+            id: post.id,
+            type: 'post',
+            title: post.title,
+            slug: post.slug,
+            image: post.featured_image ?? null,
+            description: post.excerpt ?? null,
+          })
+        }
       })
     }
 
     if (booksResult.data) {
-      booksResult.data.forEach((book: Partial<Book>) => {
-        results.push({
-          id: book.id,
-          type: 'book',
-          title: book.title,
-          slug: book.slug,
-          image: book.cover_image ?? null,
-          description: book.description ?? null,
-        })
+      booksResult.data.forEach((book) => {
+        if (book.id && book.title && book.slug) {
+          results.push({
+            id: book.id,
+            type: 'book',
+            title: book.title,
+            slug: book.slug,
+            image: book.cover_image ?? null,
+            description: book.description ?? null,
+          })
+        }
       })
     }
 

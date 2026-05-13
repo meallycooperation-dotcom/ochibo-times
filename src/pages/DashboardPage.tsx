@@ -29,6 +29,7 @@ type PostFormState = {
   featured_image: string
   content: string
   published: boolean
+  category: string
 }
 
 const emptyPostForm: PostFormState = {
@@ -39,6 +40,7 @@ const emptyPostForm: PostFormState = {
   featured_image: '',
   content: '',
   published: false,
+  category: '',
 }
 
 function slugify(value: string) {
@@ -220,6 +222,7 @@ export function DashboardPage() {
       featured_image: post.featured_image ?? '',
       content: post.content,
       published: post.published,
+      category: post.category ?? '',
     })
     setActiveTab('new-post')
   }
@@ -250,6 +253,7 @@ export function DashboardPage() {
       content: postForm.content,
       excerpt: postForm.excerpt || null,
       featured_image: postForm.featured_image || null,
+      category: postForm.category || null,
       published: postForm.published,
       author_id: sessionUserId,
     }
@@ -490,6 +494,30 @@ export function DashboardPage() {
                     setPostForm((current) => ({ ...current, featured_image: event.target.value }))
                   }
                 />
+              </label>
+
+              <label>
+                Category
+                <select
+                  value={postForm.category}
+                  onChange={(event) =>
+                    setPostForm((current) => ({ ...current, category: event.target.value }))
+                  }
+                >
+                  <option value="">Select a category</option>
+                  <option value="Blogs">Blogs</option>
+                  <option value="Entertainment">Entertainment</option>
+                  <option value="Events">Events</option>
+                  <option value="Leaks">Leaks</option>
+                  <option value="Tech">Tech</option>
+                  <option value="Music">Music</option>
+                  <option value="Clout">Clout</option>
+                  <option value="Film">Film</option>
+                  <option value="News">News</option>
+                  <option value="Sports">Sports</option>
+                  <option value="Investigations">Investigations</option>
+                  <option value="Hustle">Hustle</option>
+                </select>
               </label>
 
               <label>

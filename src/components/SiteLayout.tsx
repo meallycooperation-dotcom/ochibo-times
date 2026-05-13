@@ -1,13 +1,39 @@
 import type { ReactNode } from 'react'
-import { useEffect, useState } from 'react'
-import { Link, NavLink, Outlet } from 'react-router-dom'
-import { ArrowRight, BookOpen, Home, LayoutDashboard, User } from 'lucide-react'
+import { useEffect, useState, useRef } from 'react'
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { ArrowRight, BookOpen, Home, LayoutDashboard, Search, User, X } from 'lucide-react'
 import { getCurrentSession, getProfileById } from '../lib/auth'
+import { supabase } from '../lib/supabase'
+import type { BlogPost, Book } from '../lib/types'
+import { useSearchContext } from '../context/SearchContext'
+
+type SearchResult = {
+  id: string
+  type: 'post' | 'book'
+  title: string
+  slug: string
+  image: string | null
+  description: string | null
+}
+
+function sanitizeSearch(input: string): string {
+  return input
+    .trim()
+    .replace(/[<>"'%;()&+]/g, '')
+    .slice(0, 100)
+}
 
 export function SiteLayout() {
+  const navigate = useNavigate()
   const [session, setSession] = useState<Awaited<ReturnType<typeof getCurrentSession>> | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [checking, setChecking] = useState(true)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+  const [searching, setSearching] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const { categoryFilter, setCategoryFilter } = useSearchContext()
 
   useEffect(() => {
     let active = true
@@ -35,6 +61,84 @@ export function SiteLayout() {
     }
   }, [])
 
+  useEffect(() => {
+    if (searchOpen && searchInputRef.current) {
+      searchInputRef.current.focus()
+    }
+  }, [searchOpen])
+
+  async function handleSearch(query: string) {
+    const sanitized = sanitizeSearch(query)
+    if (sanitized.length < 2) {
+      setSearchResults([])
+      return
+    }
+
+    setSearching(true)
+    const searchTerm = `%${sanitized}%`
+
+    const [postsResult, booksResult] = await Promise.all([
+      supabase
+        .from('blog_posts')
+        .select('id, title, slug, featured_image, excerpt')
+        .eq('published', true)
+        .or(`title.ilike.${searchTerm},excerpt.ilike.${searchTerm},content.ilike.${searchTerm}`),
+      supabase
+        .from('books')
+        .select('id, title, slug, cover_image, description')
+        .eq('published', true)
+        .or(`title.ilike.${searchTerm},description.ilike.${searchTerm}`),
+    ])
+
+    const results: SearchResult[] = []
+
+    if (postsResult.data) {
+      postsResult.data.forEach((post: Partial<BlogPost>) => {
+        results.push({
+          id: post.id,
+          type: 'post',
+          title: post.title,
+          slug: post.slug,
+          image: post.featured_image ?? null,
+          description: post.excerpt ?? null,
+        })
+      })
+    }
+
+    if (booksResult.data) {
+      booksResult.data.forEach((book: Partial<Book>) => {
+        results.push({
+          id: book.id,
+          type: 'book',
+          title: book.title,
+          slug: book.slug,
+          image: book.cover_image ?? null,
+          description: book.description ?? null,
+        })
+      })
+    }
+
+    setSearchResults(results)
+    setSearching(false)
+  }
+
+  function handleResultClick(result: SearchResult) {
+    setSearchOpen(false)
+    setSearchQuery('')
+    setSearchResults([])
+    if (result.type === 'post') {
+      navigate(`/post/${result.slug}`)
+    } else {
+      navigate(`/book/${result.slug}`)
+    }
+  }
+
+  function closeSearch() {
+    setSearchOpen(false)
+    setSearchQuery('')
+    setSearchResults([])
+  }
+
   return (
     <div className="site-shell">
       <header className="site-header">
@@ -50,6 +154,10 @@ export function SiteLayout() {
             <Home size={16} />
             Home
           </NavLink>
+          <button className="nav-search-btn" onClick={() => setSearchOpen(true)} aria-label="Search">
+            <Search size={16} />
+            Search
+          </button>
           {!checking && !session ? (
             <>
               <NavLink to="/signup">Signup</NavLink>
@@ -71,6 +179,76 @@ export function SiteLayout() {
             </>
           ) : null}
         </nav>
+
+        <select
+          className="category-filter"
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+        >
+          <option value="">All</option>
+          <option value="Blogs">Blogs</option>
+          <option value="Entertainment">Entertainment</option>
+          <option value="Events">Events</option>
+          <option value="Leaks">Leaks</option>
+          <option value="Tech">Tech</option>
+          <option value="Music">Music</option>
+          <option value="Clout">Clout</option>
+          <option value="Film">Film</option>
+          <option value="News">News</option>
+          <option value="Sports">Sports</option>
+          <option value="Investigations">Investigations</option>
+          <option value="Hustle">Hustle</option>
+        </select>
+
+        {searchOpen && (
+          <div className="search-overlay" onClick={closeSearch}>
+            <div className="search-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="search-header">
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Search posts and books..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value)
+                    void handleSearch(e.target.value)
+                  }}
+                  className="search-input"
+                />
+                <button className="search-close" onClick={closeSearch} aria-label="Close search">
+                  <X size={20} />
+                </button>
+              </div>
+
+              {searching && <p className="search-status">Searching...</p>}
+
+              {searchResults.length > 0 ? (
+                <div className="search-results">
+                  {searchResults.map((result) => (
+                    <button
+                      key={`${result.type}-${result.id}`}
+                      className="search-result-item"
+                      onClick={() => handleResultClick(result)}
+                    >
+                      {result.image && (
+                        <img src={result.image} alt="" className="search-result-image" />
+                      )}
+                      <div className="search-result-info">
+                        <span className="search-result-type">{result.type}</span>
+                        <span className="search-result-title">{result.title}</span>
+                        {result.description && (
+                          <span className="search-result-desc">{result.description.slice(0, 80)}...</span>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : searchQuery.length >= 2 && !searching ? (
+                <p className="search-status">No results found for "{searchQuery}"</p>
+              ) : null}
+            </div>
+          </div>
+        )}
       </header>
 
       <main className="site-main">

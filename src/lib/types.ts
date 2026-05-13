@@ -18,6 +18,7 @@ export interface BlogPost {
   slug: string
   published: boolean
   author_id: string | null
+  category: string | null
   created_at: string
   updated_at: string | null
 }

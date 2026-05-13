@@ -9,12 +9,13 @@ import { NotFoundPage } from './pages/NotFoundPage'
 import { PostPage } from './pages/PostPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { SignupPage } from './pages/SignupPage'
+import { SearchProvider } from './context/SearchContext'
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route element={<SiteLayout />}>
+        <Route element={<SearchProvider><SiteLayout /></SearchProvider>}>
           <Route path="/" element={<HomePage />} />
           <Route path="/post/:slug" element={<PostPage />} />
           <Route path="/book/:slug" element={<BookPage />} />

@@ -5,6 +5,7 @@ import { getCurrentSession } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import type { BlogPost, Book } from '../lib/types'
 import { ArticleBadge, EmptyState, SectionHeading } from '../components/SiteLayout'
+import { useSearchContext } from '../context/SearchContext'
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat('en', {
@@ -29,6 +30,7 @@ export function HomePage() {
   const [books, setBooks] = useState<Book[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const { categoryFilter } = useSearchContext()
 
   useEffect(() => {
     let active = true
@@ -50,11 +52,16 @@ export function HomePage() {
       }
 
       setLoading(true)
-      const { data, error: fetchError } = await supabase
+      let query = supabase
         .from('blog_posts')
         .select('*')
         .eq('published', true)
-        .order('created_at', { ascending: false })
+
+      if (categoryFilter) {
+        query = query.eq('category', categoryFilter)
+      }
+
+      const { data, error: fetchError } = await query.order('created_at', { ascending: false })
 
       if (!active) return
 
@@ -108,7 +115,7 @@ export function HomePage() {
     return () => {
       active = false
     }
-  }, [])
+  }, [categoryFilter])
 
   async function toggleFavorite(postId: string) {
     if (!session?.user?.id) return

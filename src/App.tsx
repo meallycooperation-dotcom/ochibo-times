@@ -4,6 +4,7 @@ import { SiteLayout } from './components/SiteLayout'
 import { BookPage } from './pages/BookPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { DonatePage } from './pages/DonatePage'
+import { BookAudioPage } from './pages/BookAudioPage'
 import { HomePage } from './pages/HomePage'
 import { LoginPage } from './pages/LoginPage'
 import { NotFoundPage } from './pages/NotFoundPage'
@@ -20,6 +21,7 @@ export default function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/donate" element={<DonatePage />} />
           <Route path="/post/:slug" element={<PostPage />} />
+          <Route path="/book/:slug/audio" element={<BookAudioPage />} />
           <Route path="/book/:slug" element={<BookPage />} />
           <Route path="/profile" element={<ProfilePage />} />
         </Route>

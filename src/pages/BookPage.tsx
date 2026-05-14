@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link, Navigate, useParams } from 'react-router-dom'
-import { BookOpen, CalendarDays, ChevronLeft, Pause, Play, Sparkles } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { BookOpen, CalendarDays, ChevronLeft, Play, Sparkles } from 'lucide-react'
 import type { Book, BookChapter } from '../lib/types'
 import { Seo } from '../components/Seo'
 import { EmptyState, SectionHeading } from '../components/SiteLayout'
@@ -17,13 +17,13 @@ function formatDate(date: string) {
 
 export function BookPage() {
   const { slug } = useParams()
+  const navigate = useNavigate()
+  const location = useLocation()
   const [book, setBook] = useState<Book | null>(null)
   const [chapters, setChapters] = useState<BookChapter[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeChapter, setActiveChapter] = useState<BookChapter | null>(null)
-  const [isAudioPlaying, setIsAudioPlaying] = useState(false)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
     if (!slug) {
@@ -51,7 +51,6 @@ export function BookPage() {
 
         setBook(currentBook)
         setChapters(currentChapters)
-        setActiveChapter(currentChapters[0] ?? null)
         setError(null)
       } catch (fetchError) {
         if (!active) {
@@ -76,35 +75,18 @@ export function BookPage() {
   }, [slug])
 
   useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) {
+    if (!chapters.length) {
+      setActiveChapter(null)
       return
     }
 
-    audio.pause()
-    audio.currentTime = 0
-    setIsAudioPlaying(false)
-  }, [activeChapter?.audio_url])
+    const searchParams = new URLSearchParams(location.search)
+    const requestedChapterId = searchParams.get('chapter')
+    const requestedChapter =
+      chapters.find((chapter) => chapter.id === requestedChapterId) ?? chapters[0] ?? null
 
-  async function toggleAudio() {
-    const audio = audioRef.current
-    if (!audio || !activeChapter?.audio_url) {
-      return
-    }
-
-    if (audio.paused) {
-      try {
-        await audio.play()
-        setIsAudioPlaying(true)
-      } catch (playError) {
-        console.error('Failed to play chapter audio', playError)
-      }
-      return
-    }
-
-    audio.pause()
-    setIsAudioPlaying(false)
-  }
+    setActiveChapter(requestedChapter)
+  }, [chapters, location.search])
 
   if (!slug) {
     return <Navigate to="/" replace />
@@ -263,31 +245,20 @@ export function BookPage() {
       </button>
 
       {activeChapter?.audio_url ? (
-        <>
-          <audio
-            ref={audioRef}
-            className="chapter-audio-player"
-            src={activeChapter.audio_url}
-            preload="none"
-            onEnded={() => setIsAudioPlaying(false)}
-            onPause={() => setIsAudioPlaying(false)}
-            onPlay={() => setIsAudioPlaying(true)}
-          />
-          <button
-            type="button"
-            className={`audio-fab ${isAudioPlaying ? 'audio-fab-playing' : ''}`}
-            onClick={() => void toggleAudio()}
-            aria-label={isAudioPlaying ? 'Pause audiobook' : 'Play audiobook'}
-          >
-            <span className="audio-fab-label">
-              <BookOpen size={16} />
-              <span>Audiobook</span>
-            </span>
-            <span className="audio-fab-action">
-              {isAudioPlaying ? <Pause size={16} /> : <Play size={16} />}
-            </span>
-          </button>
-        </>
+        <button
+          type="button"
+          className="audio-fab audio-fab-compact"
+          onClick={() => navigate(`/book/${slug}/audio?chapter=${activeChapter.id}`)}
+          aria-label="Open audiobook player"
+        >
+          <span className="audio-fab-compact-icon">
+            <BookOpen size={16} />
+          </span>
+          <span className="audio-fab-compact-text">Audiobook</span>
+          <span className="audio-fab-action">
+            <Play size={16} />
+          </span>
+        </button>
       ) : null}
     </article>
   )

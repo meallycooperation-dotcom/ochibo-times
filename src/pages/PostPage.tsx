@@ -1,6 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
-import { CalendarDays, ChevronLeft, Sparkles } from 'lucide-react'
+import {
+  CalendarDays,
+  Check,
+  ChevronLeft,
+  Copy,
+  MessageCircleMore,
+  Share2,
+  Sparkles,
+  Send,
+  X,
+} from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { BlogPost, PageView } from '../lib/types'
 import { Seo } from '../components/Seo'
@@ -25,6 +35,8 @@ export function PostPage() {
   const [post, setPost] = useState<BlogPost | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
   const viewedSlug = useRef<string | null>(null)
 
   useEffect(() => {
@@ -99,6 +111,21 @@ export function PostPage() {
     void recordView()
   }, [post])
 
+  useEffect(() => {
+    if (!shareOpen) {
+      return
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShareOpen(false)
+      }
+    }
+
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [shareOpen])
+
   if (!slug) {
     return <Navigate to="/" replace />
   }
@@ -106,6 +133,115 @@ export function PostPage() {
   const pageTitle = post ? `${post.title}` : 'Article not found'
   const pageDescription = post?.excerpt || post?.content.slice(0, 160) || 'Read the full article from Ochibo Times.'
   const pageImage = post?.featured_image ?? undefined
+  const shareTitle = post?.title ?? pageTitle
+  const shareText = post?.excerpt || post?.content.slice(0, 160) || 'Read this story on Ochibo Times.'
+  const shareUrl = typeof window !== 'undefined' ? window.location.href : buildAbsoluteUrl(`/post/${slug}`)
+  const canUseNativeShare =
+    typeof window !== 'undefined' && typeof navigator !== 'undefined' && typeof navigator.share === 'function'
+
+  async function handleNativeShare() {
+    if (!post || !canUseNativeShare) {
+      return false
+    }
+
+    try {
+      await navigator.share({
+        title: shareTitle,
+        text: shareText,
+        url: shareUrl,
+      })
+      return true
+    } catch (shareError) {
+      if ((shareError as DOMException)?.name !== 'AbortError') {
+        console.error('Native share failed', shareError)
+      }
+      return false
+    }
+  }
+
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      setCopyState('copied')
+      window.setTimeout(() => setCopyState('idle'), 1800)
+    } catch (copyError) {
+      console.error('Failed to copy share link', copyError)
+      setCopyState('error')
+      window.setTimeout(() => setCopyState('idle'), 2200)
+    }
+  }
+
+  function openShareTarget(url: string) {
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
+  function handleShareButton() {
+    setShareOpen(true)
+  }
+
+  const shareModal = post && shareOpen ? (
+    <div className="share-overlay" onClick={() => setShareOpen(false)}>
+      <div className="share-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Share article">
+        <div className="share-modal-header">
+          <div>
+            <p className="eyebrow">Share this story</p>
+            <h2>{post.title}</h2>
+          </div>
+          <button type="button" className="share-close" onClick={() => setShareOpen(false)} aria-label="Close share dialog">
+            <X size={18} />
+          </button>
+        </div>
+
+        <p className="share-description">{shareText}</p>
+
+        <div className="share-grid">
+          {canUseNativeShare ? (
+            <button type="button" className="share-option share-option-primary" onClick={() => void handleNativeShare()}>
+              <Share2 size={18} />
+              Share on your device
+            </button>
+          ) : null}
+
+          <button
+            type="button"
+            className="share-option"
+            onClick={() => openShareTarget(`https://wa.me/?text=${encodeURIComponent(`${shareTitle} ${shareUrl}`)}`)}
+          >
+            <MessageCircleMore size={18} />
+            WhatsApp
+          </button>
+
+          <button
+            type="button"
+            className="share-option"
+            onClick={() =>
+              openShareTarget(
+                `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareTitle)}&url=${encodeURIComponent(shareUrl)}`,
+              )
+            }
+          >
+            <Send size={18} />
+            X
+          </button>
+
+          <button
+            type="button"
+            className="share-option"
+            onClick={() => openShareTarget(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`)}
+          >
+            <Share2 size={18} />
+            Facebook
+          </button>
+
+          <button type="button" className="share-option" onClick={() => void copyLink()}>
+            {copyState === 'copied' ? <Check size={18} /> : <Copy size={18} />}
+            {copyState === 'copied' ? 'Copied link' : copyState === 'error' ? 'Copy failed' : 'Copy link'}
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null
+
   const seo = (
     <Seo
       title={pageTitle}
@@ -189,6 +325,7 @@ export function PostPage() {
   return (
     <article className="post-shell">
       {seo}
+      {shareModal}
       <Link to="/" className="back-link">
         <ChevronLeft size={16} />
         Back to home
@@ -213,6 +350,17 @@ export function PostPage() {
       ) : null}
 
       <div className="post-body">{post.content}</div>
+
+      <div className="post-share-row">
+        <button type="button" className="primary-button" onClick={handleShareButton}>
+          <Share2 size={16} />
+          Share article
+        </button>
+        <button type="button" className="secondary-button" onClick={() => void handleNativeShare()}>
+          <Share2 size={16} />
+          Native share
+        </button>
+      </div>
     </article>
   )
 }

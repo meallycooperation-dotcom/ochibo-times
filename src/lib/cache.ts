@@ -196,13 +196,13 @@ export async function syncBookChapters() {
     readFingerprint: async () => {
       const { data, error } = await supabase
         .from('book_chapters')
-        .select('id, book_id, chapter_number, updated_at, created_at')
+        .select('id, book_id, chapter_number, audio_url, updated_at, created_at')
 
       if (error) throw error
 
       return fingerprintRows(
         (data as Record<string, unknown>[]) ?? [],
-        ['id', 'book_id', 'chapter_number', 'updated_at', 'created_at'],
+        ['id', 'book_id', 'chapter_number', 'audio_url', 'updated_at', 'created_at'],
       )
     },
     readRemote: async () => {

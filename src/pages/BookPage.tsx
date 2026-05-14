@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
-import { CalendarDays, ChevronLeft, Sparkles } from 'lucide-react'
+import { BookOpen, CalendarDays, ChevronLeft, Pause, Play, Sparkles } from 'lucide-react'
 import type { Book, BookChapter } from '../lib/types'
 import { Seo } from '../components/Seo'
 import { EmptyState, SectionHeading } from '../components/SiteLayout'
@@ -22,6 +22,8 @@ export function BookPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeChapter, setActiveChapter] = useState<BookChapter | null>(null)
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
     if (!slug) {
@@ -72,6 +74,37 @@ export function BookPage() {
       active = false
     }
   }, [slug])
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) {
+      return
+    }
+
+    audio.pause()
+    audio.currentTime = 0
+    setIsAudioPlaying(false)
+  }, [activeChapter?.audio_url])
+
+  async function toggleAudio() {
+    const audio = audioRef.current
+    if (!audio || !activeChapter?.audio_url) {
+      return
+    }
+
+    if (audio.paused) {
+      try {
+        await audio.play()
+        setIsAudioPlaying(true)
+      } catch (playError) {
+        console.error('Failed to play chapter audio', playError)
+      }
+      return
+    }
+
+    audio.pause()
+    setIsAudioPlaying(false)
+  }
 
   if (!slug) {
     return <Navigate to="/" replace />
@@ -228,6 +261,34 @@ export function BookPage() {
       <button className="back-to-top" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
         Back to top
       </button>
+
+      {activeChapter?.audio_url ? (
+        <>
+          <audio
+            ref={audioRef}
+            className="chapter-audio-player"
+            src={activeChapter.audio_url}
+            preload="none"
+            onEnded={() => setIsAudioPlaying(false)}
+            onPause={() => setIsAudioPlaying(false)}
+            onPlay={() => setIsAudioPlaying(true)}
+          />
+          <button
+            type="button"
+            className={`audio-fab ${isAudioPlaying ? 'audio-fab-playing' : ''}`}
+            onClick={() => void toggleAudio()}
+            aria-label={isAudioPlaying ? 'Pause audiobook' : 'Play audiobook'}
+          >
+            <span className="audio-fab-label">
+              <BookOpen size={16} />
+              <span>Audiobook</span>
+            </span>
+            <span className="audio-fab-action">
+              {isAudioPlaying ? <Pause size={16} /> : <Play size={16} />}
+            </span>
+          </button>
+        </>
+      ) : null}
     </article>
   )
 }

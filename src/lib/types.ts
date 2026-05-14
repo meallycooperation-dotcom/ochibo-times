@@ -51,6 +51,7 @@ export interface BookChapter {
   title: string
   content: string
   image_url: string | null
+  audio_url: string | null
   created_at: string
   updated_at: string | null
 }

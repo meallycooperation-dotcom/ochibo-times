@@ -179,6 +179,10 @@ export function PostPage() {
     setShareOpen(true)
   }
 
+  function scrollToTop() {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   const shareModal = post && shareOpen ? (
     <div className="share-overlay" onClick={() => setShareOpen(false)}>
       <div className="share-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Share article">
@@ -359,6 +363,10 @@ export function PostPage() {
         <button type="button" className="secondary-button" onClick={() => void handleNativeShare()}>
           <Share2 size={16} />
           Native share
+        </button>
+        <button type="button" className="secondary-button" onClick={scrollToTop}>
+          <ChevronLeft size={16} className="back-to-top-icon" />
+          Back to top
         </button>
       </div>
     </article>

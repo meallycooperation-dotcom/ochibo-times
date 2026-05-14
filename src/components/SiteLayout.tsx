@@ -167,6 +167,7 @@ export function SiteLayout() {
             <Home size={16} />
             Home
           </NavLink>
+          <NavLink to="/donate">Donate</NavLink>
           <button className="nav-search-btn" onClick={() => setSearchOpen(true)} aria-label="Search">
             <Search size={16} />
             Search
@@ -272,12 +273,18 @@ export function SiteLayout() {
         <div>
           <strong>Ochibo Times</strong>
         </div>
-        {!checking && !session ? (
-          <Link to="/signup" className="footer-cta">
-            Create an account
+        <div className="footer-actions">
+          <Link to="/donate" className="footer-cta">
+            Donate
             <ArrowRight size={16} />
           </Link>
-        ) : null}
+          {!checking && !session ? (
+            <Link to="/signup" className="footer-cta">
+              Create an account
+              <ArrowRight size={16} />
+            </Link>
+          ) : null}
+        </div>
       </footer>
     </div>
   )

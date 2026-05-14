@@ -330,7 +330,9 @@
 .meta-row,
 .post-meta-row,
 .hero-stats,
-.analytics-strip {
+.analytics-strip,
+.footer-actions,
+.donate-number-row {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
@@ -404,6 +406,23 @@
 .hero-spotlight {
   border-radius: 28px;
   padding: 22px;
+}
+
+.donate-card {
+  border-radius: 22px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.donate-number-row {
+  justify-content: space-between;
+}
+
+.donate-number {
+  font-size: 1.5rem;
+  letter-spacing: 0.08em;
+  font-family: Georgia, 'Times New Roman', serif;
 }
 
 .spotlight-card {
@@ -997,6 +1016,10 @@
   padding-top: 20px;
   border-top: 1px solid var(--border);
   color: var(--muted);
+}
+
+.footer-actions {
+  justify-content: flex-end;
 }
 
 .footer-cta {

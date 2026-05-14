@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { SiteLayout } from './components/SiteLayout'
 import { BookPage } from './pages/BookPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { DonatePage } from './pages/DonatePage'
 import { HomePage } from './pages/HomePage'
 import { LoginPage } from './pages/LoginPage'
 import { NotFoundPage } from './pages/NotFoundPage'
@@ -17,6 +18,7 @@ export default function App() {
       <Routes>
         <Route element={<SearchProvider><SiteLayout /></SearchProvider>}>
           <Route path="/" element={<HomePage />} />
+          <Route path="/donate" element={<DonatePage />} />
           <Route path="/post/:slug" element={<PostPage />} />
           <Route path="/book/:slug" element={<BookPage />} />
           <Route path="/profile" element={<ProfilePage />} />

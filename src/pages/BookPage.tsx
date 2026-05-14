@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { CalendarDays, ChevronLeft, Sparkles } from 'lucide-react'
-import { supabase } from '../lib/supabase'
 import type { Book, BookChapter } from '../lib/types'
 import { EmptyState, SectionHeading } from '../components/SiteLayout'
+import { getCachedBookChapters, getCachedBooks, syncBookChapters, syncBooks } from '../lib/cache'
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat('en', {
@@ -30,41 +30,38 @@ export function BookPage() {
 
     async function loadBook() {
       setLoading(true)
-      const { data, error: fetchError } = await supabase
-        .from('books')
-        .select('*')
-        .eq('slug', slug)
-        .eq('published', true)
-        .maybeSingle()
 
-      if (!active) {
-        return
-      }
+      try {
+        await Promise.all([syncBooks(), syncBookChapters()])
+        const [cachedBooks, cachedChapters] = await Promise.all([getCachedBooks(), getCachedBookChapters()])
+        const currentBook = cachedBooks.find((entry) => entry.slug === slug && entry.published) ?? null
+        const currentChapters = currentBook
+          ? cachedChapters
+              .filter((chapter) => chapter.book_id === currentBook.id)
+              .sort((left, right) => left.chapter_number - right.chapter_number)
+          : []
 
-      if (fetchError) {
-        setError(fetchError.message)
-        setBook(null)
-      } else {
-        setBook((data as Book) ?? null)
+        if (!active) {
+          return
+        }
+
+        setBook(currentBook)
+        setChapters(currentChapters)
+        setActiveChapter(currentChapters[0] ?? null)
         setError(null)
+      } catch (fetchError) {
+        if (!active) {
+          return
+        }
 
-        if (data) {
-          const { data: chaptersData } = await supabase
-            .from('book_chapters')
-            .select('*')
-            .eq('book_id', data.id)
-            .order('chapter_number', { ascending: true })
-
-          if (chaptersData) {
-            setChapters(chaptersData as BookChapter[])
-            if (chaptersData.length > 0) {
-              setActiveChapter(chaptersData[0] as BookChapter)
-            }
-          }
+        setError(fetchError instanceof Error ? fetchError.message : 'Failed to load book')
+        setBook(null)
+        setChapters([])
+      } finally {
+        if (active) {
+          setLoading(false)
         }
       }
-
-      setLoading(false)
     }
 
     loadBook()

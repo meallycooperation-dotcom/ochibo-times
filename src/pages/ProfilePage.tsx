@@ -2,9 +2,17 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { Bookmark, LogOut, Save, UserRound } from 'lucide-react'
 import { SectionHeading } from '../components/SiteLayout'
-import { getCurrentSession, getProfileById } from '../lib/auth'
+import { getCurrentSession } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import type { BlogPost, Profile } from '../lib/types'
+import {
+  getCachedFavoritePostIds,
+  getCachedPosts,
+  syncBlogPosts,
+  syncFavorites,
+  syncProfile,
+  upsertCachedProfile,
+} from '../lib/cache'
 
 export function ProfilePage() {
   const navigate = useNavigate()
@@ -32,7 +40,7 @@ export function ProfilePage() {
         return
       }
 
-      const currentProfile = await getProfileById(session.user.id)
+      const currentProfile = await syncProfile(session.user.id)
 
       if (!active) {
         return
@@ -42,22 +50,12 @@ export function ProfilePage() {
       setProfile(currentProfile)
       setFormData(currentProfile)
 
-      const { data: favData } = await supabase
-        .from('favorites')
-        .select('post_id')
-        .eq('user_id', session.user.id)
-        .order('created_at', { ascending: false })
-
-      if (favData && favData.length > 0) {
-        const postIds = favData.map((f) => f.post_id).filter(Boolean)
-        const { data: postsData } = await supabase
-          .from('blog_posts')
-          .select('*')
-          .in('id', postIds)
-        if (postsData) {
-          setFavorites(postsData as BlogPost[])
-        }
-      }
+      await Promise.all([syncProfile(session.user.id), syncFavorites(session.user.id), syncBlogPosts()])
+      const postIds = await getCachedFavoritePostIds(session.user.id)
+      const posts = await getCachedPosts()
+      setFavorites(
+        posts.filter((post) => postIds.includes(post.id) && (post.status === 'published' || post.published)),
+      )
 
       setChecking(false)
     }
@@ -96,6 +94,7 @@ export function ProfilePage() {
         setStatusMessage('Profile updated successfully.')
         setProfile(formData)
         setEditMode(false)
+        await upsertCachedProfile(formData)
       }
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : 'An error occurred')

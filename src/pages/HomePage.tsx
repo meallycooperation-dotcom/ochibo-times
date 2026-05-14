@@ -4,6 +4,17 @@ import { ArrowRight, Bookmark, CalendarDays, Eye, LogIn, PlusCircle, Sparkles } 
 import { getCurrentSession } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import type { BlogPost, Book } from '../lib/types'
+import {
+  addCachedFavorite,
+  getCachedBooks,
+  getCachedPageViewCounts,
+  getCachedPosts,
+  removeCachedFavorite,
+  syncBlogPosts,
+  syncBooks,
+  syncFavorites,
+  syncPageViews,
+} from '../lib/cache'
 import { ArticleBadge, EmptyState, SectionHeading } from '../components/SiteLayout'
 import { useSearchContext } from '../context/SearchContext'
 
@@ -40,82 +51,48 @@ export function HomePage() {
       if (!active) return
 
       setSession(currentSession)
-
-      if (currentSession?.user?.id) {
-        const { data: favData } = await supabase
-          .from('favorites')
-          .select('post_id')
-          .eq('user_id', currentSession.user.id)
-        if (favData) {
-          setFavorites(new Set(favData.map((f: { post_id: string }) => f.post_id)))
-        }
-      }
-
       setLoading(true)
-      let query = supabase
-        .from('blog_posts')
-        .select('*')
-        .eq('published', true)
 
-      if (categoryFilter) {
-        query = query.eq('category', categoryFilter)
+      await Promise.all([syncBlogPosts(), syncBooks()])
+
+      let favoriteRows: { post_id: string }[] = []
+      if (currentSession?.user?.id) {
+        await syncPageViews()
+        favoriteRows = (await syncFavorites(currentSession.user.id)) as { post_id: string }[]
       }
-
-      const { data, error: fetchError } = await query.order('created_at', { ascending: false })
 
       if (!active) return
 
-      if (fetchError) {
-        setError(fetchError.message)
-        setPosts([])
-        setViews({})
-      } else {
-        const postsData = (data as BlogPost[]) ?? []
-        setPosts(postsData)
-        setError(null)
+      const [cachedPosts, cachedBooks, cachedViews] = await Promise.all([
+        getCachedPosts(),
+        getCachedBooks(),
+        getCachedPageViewCounts(),
+      ])
 
-        if (postsData.length > 0) {
-          const postIds = postsData.map((post) => post.id)
-          const { data: viewsData, error: viewsError } = await supabase
-            .from('page_views')
-            .select('post_id')
-            .in('post_id', postIds)
-
-          if (!viewsError && viewsData) {
-            const counts: Record<string, number> = {}
-            viewsData.forEach((view) => {
-              if (view.post_id) {
-                counts[view.post_id] = (counts[view.post_id] ?? 0) + 1
-              }
-            })
-            setViews(counts)
-          } else {
-            setViews({})
-          }
-        } else {
-          setViews({})
-        }
-
-        const { data: booksData } = await supabase
-          .from('books')
-          .select('*')
-          .eq('published', true)
-          .order('created_at', { ascending: false })
-
-        if (booksData) {
-          setBooks(booksData as Book[])
-        }
-      }
-
+      setPosts(cachedPosts)
+      setBooks(cachedBooks)
+      setViews(cachedViews)
+      setFavorites(
+        new Set(
+          ((favoriteRows ?? []) as { post_id: string }[])
+            .map((favorite) => favorite.post_id)
+            .filter(Boolean),
+        ),
+      )
+      setError(null)
       setLoading(false)
     }
 
-    checkAuthAndLoadPosts()
+    checkAuthAndLoadPosts().catch((loadError) => {
+      if (!active) return
+      setError(loadError instanceof Error ? loadError.message : 'Failed to load home content')
+      setLoading(false)
+    })
 
     return () => {
       active = false
     }
-  }, [categoryFilter])
+  }, [])
 
   async function toggleFavorite(postId: string) {
     if (!session?.user?.id) return
@@ -123,16 +100,36 @@ export function HomePage() {
     const isFav = favorites.has(postId)
     if (isFav) {
       await supabase.from('favorites').delete().eq('user_id', session.user.id).eq('post_id', postId)
+      await removeCachedFavorite(session.user.id, postId)
       setFavorites((prev) => {
         const next = new Set(prev)
         next.delete(postId)
         return next
       })
     } else {
-      await supabase.from('favorites').insert({ user_id: session.user.id, post_id: postId })
+      const { data, error: favoriteError } = await supabase
+        .from('favorites')
+        .insert({ user_id: session.user.id, post_id: postId })
+        .select('id, user_id, post_id, created_at')
+        .single()
+
+      if (favoriteError) {
+        setError(favoriteError.message)
+        return
+      }
+
+      if (data) {
+        await addCachedFavorite(data as { id: string; user_id: string; post_id: string; created_at?: string })
+      }
       setFavorites((prev) => new Set(prev).add(postId))
     }
   }
+
+  const visiblePosts = categoryFilter
+    ? posts.filter((post) => (post.status === 'published' || post.published) && post.category === categoryFilter)
+    : posts.filter((post) => post.status === 'published' || post.published)
+  const featuredPost = visiblePosts[0]
+  const isAuthenticated = session !== undefined && session !== null
 
   // Show loading state while checking auth
   if (session === undefined) {
@@ -142,9 +139,6 @@ export function HomePage() {
       </div>
     )
   }
-
-  const featuredPost = posts[0]
-  const isAuthenticated = session !== undefined && session !== null
 
   return (
     <div className="page-stack">
@@ -173,7 +167,7 @@ export function HomePage() {
 
           <div className="hero-stats">
             <div>
-              <strong>{posts.length.toString().padStart(2, '0')}</strong>
+              <strong>{visiblePosts.length.toString().padStart(2, '0')}</strong>
               <span>Published articles</span>
             </div>
           </div>
@@ -229,7 +223,7 @@ export function HomePage() {
           </div>
         ) : error ? (
           <EmptyState title="Could not load articles" description={error} />
-        ) : posts.length === 0 ? (
+        ) : visiblePosts.length === 0 ? (
           <EmptyState
             icon={<Sparkles size={20} />}
             title="Nothing published yet"
@@ -237,7 +231,7 @@ export function HomePage() {
           />
         ) : (
           <div className="article-grid">
-            {posts.map((post) => (
+            {visiblePosts.map((post) => (
               <article key={post.id} className="article-card">
                 {post.featured_image ? (
                   <img src={post.featured_image} alt={post.title} />
@@ -248,7 +242,7 @@ export function HomePage() {
                   className={`bookmark-btn ${favorites.has(post.id) ? 'active' : ''} ${!session?.user?.id ? 'disabled' : ''}`}
                   onClick={() => {
                     if (!session?.user?.id) return
-                    toggleFavorite(post.id)
+                    void toggleFavorite(post.id)
                   }}
                   aria-label={favorites.has(post.id) ? 'Remove from favorites' : 'Add to favorites'}
                   disabled={!session?.user?.id}

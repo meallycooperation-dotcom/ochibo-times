@@ -16,10 +16,28 @@ import {
 import { SectionHeading, EmptyState } from '../components/SiteLayout'
 import { getCurrentSession, getProfileById, isAdminSession } from '../lib/auth'
 import { supabase } from '../lib/supabase'
-import type { BlogPost, Book, Profile } from '../lib/types'
+import type { BlogPost, Book, Draft, PostStatus, Profile } from '../lib/types'
+import {
+  getCachedPageViewCounts,
+  getCachedPosts,
+  getCachedBooks,
+  getLatestCachedDraft,
+  removeCachedBook,
+  removeCachedPost,
+  removeCachedDraft,
+  replaceCachedChapters,
+  saveCachedDraft,
+  syncBlogPosts,
+  syncBooks,
+  syncPageViews,
+  syncDrafts,
+  upsertCachedPost,
+} from '../lib/cache'
 import { BooksEditor } from './BooksEditor'
+import { DraftsPage } from './DraftsPage'
+import { SentWorkPage } from './SentWorkPage'
 
-type Tab = 'posts' | 'new-post' | 'books' | 'new-book' | 'analytics' | 'profile'
+type Tab = 'posts' | 'new-post' | 'books' | 'new-book' | 'analytics' | 'drafts' | 'sent-work' | 'profile'
 
 type PostFormState = {
   id: string
@@ -29,6 +47,15 @@ type PostFormState = {
   featured_image: string
   content: string
   published: boolean
+  status: PostStatus
+  category: string
+}
+
+type DraftFormSnapshot = {
+  slug: string
+  content: string
+  excerpt: string
+  featured_image: string
   category: string
 }
 
@@ -40,7 +67,12 @@ const emptyPostForm: PostFormState = {
   featured_image: '',
   content: '',
   published: false,
+  status: 'pending',
   category: '',
+}
+
+function getPostStatus(post: BlogPost) {
+  return post.status ?? (post.published ? 'published' : 'pending')
 }
 
 function slugify(value: string) {
@@ -59,21 +91,67 @@ function formatDate(date: string) {
   }).format(new Date(date))
 }
 
+function parseDraftSnapshot(raw: string | null): DraftFormSnapshot {
+  if (!raw) {
+    return {
+      slug: '',
+      content: '',
+      excerpt: '',
+      featured_image: '',
+      category: '',
+    }
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<DraftFormSnapshot>
+    return {
+      slug: typeof parsed.slug === 'string' ? parsed.slug : '',
+      content: typeof parsed.content === 'string' ? parsed.content : '',
+      excerpt: typeof parsed.excerpt === 'string' ? parsed.excerpt : '',
+      featured_image: typeof parsed.featured_image === 'string' ? parsed.featured_image : '',
+      category: typeof parsed.category === 'string' ? parsed.category : '',
+    }
+  } catch {
+    return {
+      slug: '',
+      content: raw,
+      excerpt: '',
+      featured_image: '',
+      category: '',
+    }
+  }
+}
+
+function buildBlogDraftContent(form: PostFormState) {
+  return JSON.stringify({
+    slug: form.slug || slugify(form.title),
+    content: form.content,
+    excerpt: form.excerpt,
+    featured_image: form.featured_image,
+    category: form.category,
+  })
+}
+
 export function DashboardPage() {
   const navigate = useNavigate()
   const [checking, setChecking] = useState(true)
   const [sessionUserId, setSessionUserId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('posts')
   const [posts, setPosts] = useState<BlogPost[]>([])
-  const [views, setViews] = useState<{ post_id: string | null }[]>([])
+  const [views, setViews] = useState<Record<string, number>>({})
   const [profile, setProfile] = useState<Profile | null>(null)
   const [postForm, setPostForm] = useState<PostFormState>(emptyPostForm)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [loadingPosts, setLoadingPosts] = useState(false)
   const [savingPost, setSavingPost] = useState(false)
+  const [savingPostDraft, setSavingPostDraft] = useState(false)
   const [books, setBooks] = useState<Book[]>([])
   const [loadingBooks, setLoadingBooks] = useState(false)
   const [editingBook, setEditingBook] = useState<Book | null>(null)
+  const [bookDraftSeed, setBookDraftSeed] = useState<Draft | null>(null)
+  const [postDraftId, setPostDraftId] = useState<string | null>(null)
+  const [postDraftOwnerId, setPostDraftOwnerId] = useState<string | null>(null)
+  const [postDraftLoaded, setPostDraftLoaded] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -117,68 +195,152 @@ export function DashboardPage() {
     }
   }, [navigate])
 
-  useEffect(() => {
-    if (!checking) {
-      void loadPosts()
-      void loadAnalytics()
-    }
-  }, [checking])
-
   async function loadPosts() {
     setLoadingPosts(true)
-    const { data, error } = await supabase
-      .from('blog_posts')
-      .select('*')
-      .eq('author_id', sessionUserId)
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      setStatusMessage(error.message)
+    try {
+      await syncBlogPosts()
+      const cachedPosts = await getCachedPosts()
+      setPosts(
+        cachedPosts
+          .filter((post) => post.author_id === sessionUserId)
+          .sort((left, right) => right.created_at.localeCompare(left.created_at)),
+      )
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : 'Failed to load posts')
       setPosts([])
-    } else {
-      setPosts((data as BlogPost[]) ?? [])
     }
     setLoadingPosts(false)
   }
 
   async function loadAnalytics() {
-    const [postsResult, viewsResult] = await Promise.all([
-      supabase.from('blog_posts').select('*').eq('author_id', sessionUserId).order('created_at', {
-        ascending: false,
-      }),
-      supabase.from('page_views').select('post_id'),
-    ])
-
-    if (postsResult.error) {
-      setStatusMessage(postsResult.error.message)
-      return
+    try {
+      await Promise.all([syncBlogPosts(), syncPageViews()])
+      const [cachedPosts, viewCounts] = await Promise.all([getCachedPosts(), getCachedPageViewCounts()])
+      setPosts(
+        cachedPosts
+          .filter((post) => post.author_id === sessionUserId)
+          .sort((left, right) => right.created_at.localeCompare(left.created_at)),
+      )
+      setViews(viewCounts)
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : 'Failed to load analytics')
     }
-
-    if (viewsResult.error) {
-      setStatusMessage(viewsResult.error.message)
-      return
-    }
-
-    setPosts((postsResult.data as BlogPost[]) ?? [])
-    setViews((viewsResult.data as { post_id: string | null }[]) ?? [])
   }
 
   async function loadBooks() {
     setLoadingBooks(true)
-    const { data, error } = await supabase
-      .from('books')
-      .select('*')
-      .eq('author_id', sessionUserId)
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      setStatusMessage(error.message)
+    try {
+      await syncBooks()
+      const cachedBooks = await getCachedBooks()
+      setBooks(
+        cachedBooks
+          .filter((book) => book.author_id === sessionUserId)
+          .sort((left, right) => right.created_at.localeCompare(left.created_at)),
+      )
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : 'Failed to load books')
       setBooks([])
-    } else {
-      setBooks((data as Book[]) ?? [])
     }
     setLoadingBooks(false)
   }
+
+  useEffect(() => {
+    if (checking || !sessionUserId) {
+      return
+    }
+
+    let active = true
+
+    async function bootstrapDashboardData() {
+      setLoadingPosts(true)
+      try {
+        await syncBlogPosts()
+        const cachedPosts = await getCachedPosts()
+        if (!active) return
+        setPosts(
+          cachedPosts
+            .filter((post) => post.author_id === sessionUserId)
+            .sort((left, right) => right.created_at.localeCompare(left.created_at)),
+        )
+      } catch (error) {
+        if (!active) return
+        setStatusMessage(error instanceof Error ? error.message : 'Failed to load posts')
+        setPosts([])
+      } finally {
+        if (active) {
+          setLoadingPosts(false)
+        }
+      }
+
+      try {
+        await Promise.all([syncBlogPosts(), syncPageViews()])
+        const [cachedPosts, viewCounts] = await Promise.all([getCachedPosts(), getCachedPageViewCounts()])
+        if (!active) return
+        setPosts(
+          cachedPosts
+            .filter((post) => post.author_id === sessionUserId)
+            .sort((left, right) => right.created_at.localeCompare(left.created_at)),
+        )
+        setViews(viewCounts)
+      } catch (error) {
+        if (!active) return
+        setStatusMessage(error instanceof Error ? error.message : 'Failed to load analytics')
+      }
+    }
+
+    void bootstrapDashboardData()
+
+    return () => {
+      active = false
+    }
+  }, [checking, sessionUserId])
+
+  useEffect(() => {
+    if (activeTab !== 'new-post' || !sessionUserId || postForm.id || postDraftLoaded) {
+      return
+    }
+
+    const userId = sessionUserId
+    let active = true
+
+    async function loadPostDraft() {
+      try {
+        await syncDrafts(userId)
+        const draft = await getLatestCachedDraft(userId, 'blog')
+        if (!active || !draft) {
+          return
+        }
+
+        const snapshot = parseDraftSnapshot(draft.content)
+        setPostDraftId(draft.id)
+        setPostDraftOwnerId(userId)
+        setPostDraftLoaded(true)
+        setPostForm({
+          id: '',
+          title: draft.title,
+          slug: snapshot.slug || slugify(draft.title),
+          excerpt: draft.excerpt ?? snapshot.excerpt,
+          featured_image: draft.cover_image ?? snapshot.featured_image,
+          content: snapshot.content,
+          published: false,
+          status: 'pending',
+          category: draft.category ?? snapshot.category,
+        })
+      } catch (error) {
+        if (!active) {
+          return
+        }
+
+        setStatusMessage(error instanceof Error ? error.message : 'Failed to load draft')
+      }
+    }
+
+    void loadPostDraft()
+
+    return () => {
+      active = false
+    }
+  }, [activeTab, sessionUserId, postForm.id, postDraftLoaded])
 
   async function deleteBook(id: string) {
     const confirmed = window.confirm('Are you sure you want to delete this book?')
@@ -189,31 +351,36 @@ export function DashboardPage() {
       setStatusMessage(error.message)
     } else {
       setBooks((prev) => prev.filter((b) => b.id !== id))
+      await removeCachedBook(id)
+      await replaceCachedChapters(id, [])
     }
   }
 
   const analytics = useMemo(() => {
-    const counts = new Map<string, number>()
-    views.forEach((view) => {
-      if (!view.post_id) {
-        return
-      }
-      counts.set(view.post_id, (counts.get(view.post_id) ?? 0) + 1)
-    })
-
     return posts.map((post) => ({
       ...post,
-      views: counts.get(post.id) ?? 0,
+      views: views[post.id] ?? 0,
     }))
   }, [posts, views])
+  const isSuperAdmin = profile?.role === 'super-admin'
 
   function startNewPost() {
     setPostForm(emptyPostForm)
+    setPostDraftId(null)
+    setPostDraftOwnerId(null)
+    setPostDraftLoaded(false)
+    setBookDraftSeed(null)
     setActiveTab('new-post')
     setStatusMessage(null)
   }
 
   function editPost(post: BlogPost) {
+    const postStatus = getPostStatus(post)
+    if (postStatus === 'published' && !isSuperAdmin) {
+      setStatusMessage('Published posts can only be edited by a super-admin.')
+      return
+    }
+
     setPostForm({
       id: post.id,
       title: post.title,
@@ -222,20 +389,115 @@ export function DashboardPage() {
       featured_image: post.featured_image ?? '',
       content: post.content,
       published: post.published,
+      status: postStatus,
       category: post.category ?? '',
     })
+    setPostDraftId(null)
+    setPostDraftOwnerId(null)
+    setPostDraftLoaded(true)
+    setBookDraftSeed(null)
     setActiveTab('new-post')
   }
 
   function startNewBook() {
     setEditingBook(null)
+    setBookDraftSeed(null)
     setActiveTab('new-book')
     setStatusMessage(null)
   }
 
   function editBook(book: Book) {
     setEditingBook(book)
+    setBookDraftSeed(null)
     setActiveTab('new-book')
+  }
+
+  function openDraft(draft: Draft) {
+    setStatusMessage(null)
+    if (draft.type === 'blog') {
+      const snapshot = parseDraftSnapshot(draft.content)
+      setPostForm({
+        id: '',
+        title: draft.title,
+        slug: snapshot.slug || slugify(draft.title),
+        excerpt: draft.excerpt ?? snapshot.excerpt,
+        featured_image: draft.cover_image ?? snapshot.featured_image,
+        content: snapshot.content,
+        published: false,
+        status: 'pending',
+        category: draft.category ?? snapshot.category,
+      })
+      setEditingBook(null)
+      setBookDraftSeed(null)
+      setPostDraftId(draft.id)
+      setPostDraftOwnerId(draft.user_id)
+      setPostDraftLoaded(true)
+      setActiveTab('new-post')
+      return
+    }
+
+    setPostDraftId(null)
+    setPostDraftOwnerId(null)
+    setPostDraftLoaded(false)
+    setEditingBook(null)
+    setBookDraftSeed(draft)
+    setActiveTab('new-book')
+  }
+
+  async function clearPostDraft() {
+    const ownerId = postDraftOwnerId ?? sessionUserId
+    if (!ownerId || !postDraftId) {
+      return
+    }
+
+    await supabase.from('drafts').delete().eq('id', postDraftId).eq('user_id', ownerId)
+    await removeCachedDraft(ownerId, postDraftId)
+    setPostDraftId(null)
+    setPostDraftOwnerId(null)
+  }
+
+  async function savePostDraft() {
+    const ownerId = postDraftOwnerId ?? sessionUserId
+    if (!ownerId || !postForm.title.trim()) {
+      setStatusMessage('Draft title is required.')
+      return
+    }
+
+    setSavingPostDraft(true)
+    setStatusMessage(null)
+
+    const now = new Date().toISOString()
+    const draftRecord: Draft = {
+      id: postDraftId ?? crypto.randomUUID(),
+      user_id: ownerId,
+      type: 'blog',
+      title: postForm.title.trim(),
+      content: buildBlogDraftContent(postForm),
+      excerpt: postForm.excerpt || null,
+      cover_image: postForm.featured_image || null,
+      chapter_title: null,
+      chapter_number: null,
+      category: postForm.category || null,
+      source_id: postForm.id || null,
+      last_saved_at: now,
+      is_ready: false,
+      created_at: now,
+      updated_at: now,
+    }
+
+    const { data, error } = await supabase.from('drafts').upsert(draftRecord).select('*').single()
+    if (error) {
+      setStatusMessage(error.message)
+      setSavingPostDraft(false)
+      return
+    }
+
+    await saveCachedDraft(data as Draft)
+    setPostDraftId((data as Draft).id)
+    setPostDraftOwnerId(ownerId)
+    setPostDraftLoaded(true)
+    setStatusMessage('Draft saved.')
+    setSavingPostDraft(false)
   }
 
   async function savePost(event: FormEvent<HTMLFormElement>) {
@@ -247,6 +509,11 @@ export function DashboardPage() {
     setSavingPost(true)
     setStatusMessage(null)
 
+    const nextStatus: PostStatus = postForm.id
+      ? isSuperAdmin
+        ? 'published'
+        : postForm.status
+      : 'pending'
     const payload = {
       title: postForm.title,
       slug: postForm.slug || slugify(postForm.title),
@@ -254,7 +521,8 @@ export function DashboardPage() {
       excerpt: postForm.excerpt || null,
       featured_image: postForm.featured_image || null,
       category: postForm.category || null,
-      published: postForm.published,
+      status: nextStatus,
+      published: nextStatus === 'published',
       author_id: sessionUserId,
     }
 
@@ -267,14 +535,35 @@ export function DashboardPage() {
     if (error) {
       setStatusMessage(error.message)
     } else {
+      const cachedPost: BlogPost = {
+        id: postForm.id || crypto.randomUUID(),
+        title: payload.title,
+        slug: payload.slug,
+        content: payload.content,
+        excerpt: payload.excerpt,
+        featured_image: payload.featured_image,
+        category: payload.category,
+        published: payload.published,
+        status: payload.status,
+        author_id: payload.author_id,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+      await upsertCachedPost(cachedPost)
+      await clearPostDraft()
       setStatusMessage('Post saved successfully.')
       setPostForm(emptyPostForm)
+      setPostDraftId(null)
+      setPostDraftOwnerId(null)
+      setPostDraftLoaded(false)
+      setBookDraftSeed(null)
       setActiveTab('posts')
       await loadPosts()
       await loadAnalytics()
     }
 
     setSavingPost(false)
+    setSavingPostDraft(false)
   }
 
   async function removePost(id: string) {
@@ -289,6 +578,7 @@ export function DashboardPage() {
       return
     }
 
+    await removeCachedPost(id)
     await loadPosts()
     await loadAnalytics()
   }
@@ -365,6 +655,16 @@ export function DashboardPage() {
           <BarChart3 size={16} />
           Analytics
         </button>
+        {isSuperAdmin ? (
+          <button className={activeTab === 'sent-work' ? 'sidebar-item active' : 'sidebar-item'} onClick={() => setActiveTab('sent-work')}>
+            <FileText size={16} />
+            Sent work
+          </button>
+        ) : null}
+        <button className={activeTab === 'drafts' ? 'sidebar-item active' : 'sidebar-item'} onClick={() => setActiveTab('drafts')}>
+          <FileText size={16} />
+          Drafts
+        </button>
         <button className={activeTab === 'profile' ? 'sidebar-item active' : 'sidebar-item'} onClick={() => setActiveTab('profile')}>
           <UserRound size={16} />
           Profile
@@ -417,13 +717,19 @@ export function DashboardPage() {
                 {posts.map((post) => (
                   <article key={post.id} className="dashboard-card">
                     <div className="card-topline">
-                      <span>{post.published ? 'Published' : 'Draft'}</span>
+                      <span>
+                        {getPostStatus(post).charAt(0).toUpperCase() + getPostStatus(post).slice(1)}
+                      </span>
                       <span>{formatDate(post.created_at)}</span>
                     </div>
                     <h3>{post.title}</h3>
                     <p>{post.excerpt || post.content.slice(0, 140)}</p>
                     <div className="card-actions">
-                      <button className="secondary-button small" onClick={() => editPost(post)}>
+                      <button
+                        className="secondary-button small"
+                        onClick={() => editPost(post)}
+                        disabled={getPostStatus(post) === 'published' && !isSuperAdmin}
+                      >
                         <PencilLine size={16} />
                         Edit
                       </button>
@@ -442,7 +748,7 @@ export function DashboardPage() {
         {activeTab === 'new-post' ? (
           <section className="panel">
             <div className="panel-header">
-              <h2>{postForm.id ? 'Edit post' : 'Create new post'}</h2>
+              <h2>{postForm.id && isSuperAdmin ? 'Review post' : postForm.id ? 'Edit post' : 'Create new post'}</h2>
               <button className="secondary-button" onClick={() => setActiveTab('posts')}>
                 Back to posts
               </button>
@@ -530,26 +836,34 @@ export function DashboardPage() {
                 />
               </label>
 
-              <label className="checkbox-line">
-                <input
-                  type="checkbox"
-                  checked={postForm.published}
-                  onChange={(event) =>
-                    setPostForm((current) => ({ ...current, published: event.target.checked }))
-                  }
-                />
-                Publish immediately
-              </label>
-
               <div className="form-row">
                 <button type="submit" className="primary-button" disabled={savingPost}>
                   <Save size={16} />
-                  {savingPost ? 'Saving...' : 'Save post'}
+                  {savingPost
+                    ? 'Saving...'
+                    : postForm.id && isSuperAdmin && postForm.status !== 'published'
+                      ? 'Publish post'
+                      : 'Save post'}
                 </button>
                 <button
                   type="button"
                   className="secondary-button"
-                  onClick={() => setPostForm(emptyPostForm)}
+                  onClick={() => {
+                    void savePostDraft()
+                  }}
+                  disabled={savingPostDraft}
+                >
+                  <Save size={16} />
+                  {savingPostDraft ? 'Saving draft...' : 'Save draft'}
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => {
+                    setPostForm(emptyPostForm)
+                    setPostDraftId(null)
+                    setPostDraftLoaded(true)
+                  }}
                 >
                   Reset
                 </button>
@@ -614,7 +928,17 @@ export function DashboardPage() {
         ) : null}
 
         {activeTab === 'new-book' ? (
-          <BooksEditor sessionUserId={sessionUserId} editingBook={editingBook} onSave={() => { setActiveTab('books'); setEditingBook(null) }} />
+          <BooksEditor
+            sessionUserId={sessionUserId}
+            editingBook={editingBook}
+            draftSeed={bookDraftSeed}
+            onDraftConsumed={() => setBookDraftSeed(null)}
+            onSave={() => {
+              setActiveTab('books')
+              setEditingBook(null)
+              setBookDraftSeed(null)
+            }}
+          />
         ) : null}
 
         {activeTab === 'analytics' ? (
@@ -655,6 +979,22 @@ export function DashboardPage() {
               </div>
             )}
           </section>
+        ) : null}
+
+        {activeTab === 'sent-work' && isSuperAdmin ? (
+          <SentWorkPage
+            sessionUserId={sessionUserId}
+            onReviewPost={editPost}
+            onPublished={async () => {
+              await loadPosts()
+              await loadBooks()
+              await loadAnalytics()
+            }}
+          />
+        ) : null}
+
+        {activeTab === 'drafts' ? (
+          <DraftsPage sessionUserId={sessionUserId} onOpenDraft={openDraft} />
         ) : null}
 
         {activeTab === 'profile' ? (

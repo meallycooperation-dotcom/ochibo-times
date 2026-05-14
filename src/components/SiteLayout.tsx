@@ -3,7 +3,13 @@ import { useEffect, useState, useRef } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { ArrowRight, BookOpen, Home, LayoutDashboard, Search, User, X } from 'lucide-react'
 import { getCurrentSession, getProfileById } from '../lib/auth'
-import { supabase } from '../lib/supabase'
+import {
+  getCachedBooks,
+  getCachedPosts,
+  syncBooks,
+  syncBlogPosts,
+  warmContentCache,
+} from '../lib/cache'
 import { useSearchContext } from '../context/SearchContext'
 
 type SearchResult = {
@@ -47,7 +53,7 @@ export function SiteLayout() {
         const userProfile = await getProfileById(currentSession.user.id)
         if (!active) return
 
-        setIsAdmin(userProfile?.role === 'admin')
+        setIsAdmin(userProfile?.role === 'admin' || userProfile?.role === 'super-admin')
       }
 
       setChecking(false)
@@ -58,6 +64,10 @@ export function SiteLayout() {
     return () => {
       active = false
     }
+  }, [])
+
+  useEffect(() => {
+    void warmContentCache()
   }, [])
 
   useEffect(() => {
@@ -74,26 +84,22 @@ export function SiteLayout() {
     }
 
     setSearching(true)
-    const searchTerm = `%${sanitized}%`
+    try {
+      const [posts, books] = await Promise.all([
+        getCachedPosts().then((cached) => (cached.length > 0 ? cached : syncBlogPosts())),
+        getCachedBooks().then((cached) => (cached.length > 0 ? cached : syncBooks())),
+      ])
 
-    const [postsResult, booksResult] = await Promise.all([
-      supabase
-        .from('blog_posts')
-        .select('id, title, slug, featured_image, excerpt')
-        .eq('published', true)
-        .or(`title.ilike.${searchTerm},excerpt.ilike.${searchTerm},content.ilike.${searchTerm}`),
-      supabase
-        .from('books')
-        .select('id, title, slug, cover_image, description')
-        .eq('published', true)
-        .or(`title.ilike.${searchTerm},description.ilike.${searchTerm}`),
-    ])
+      const results: SearchResult[] = []
+      const queryLower = sanitized.toLowerCase()
 
-    const results: SearchResult[] = []
+      posts.forEach((post) => {
+        if (post.status !== 'published' && !post.published) {
+          return
+        }
 
-    if (postsResult.data) {
-      postsResult.data.forEach((post) => {
-        if (post.id && post.title && post.slug) {
+        const haystack = `${post.title} ${post.excerpt ?? ''} ${post.content}`.toLowerCase()
+        if (haystack.includes(queryLower) && post.id && post.title && post.slug) {
           results.push({
             id: post.id,
             type: 'post',
@@ -104,11 +110,14 @@ export function SiteLayout() {
           })
         }
       })
-    }
 
-    if (booksResult.data) {
-      booksResult.data.forEach((book) => {
-        if (book.id && book.title && book.slug) {
+      books.forEach((book) => {
+        if (!book.published) {
+          return
+        }
+
+        const haystack = `${book.title} ${book.description ?? ''}`.toLowerCase()
+        if (haystack.includes(queryLower) && book.id && book.title && book.slug) {
           results.push({
             id: book.id,
             type: 'book',
@@ -119,10 +128,11 @@ export function SiteLayout() {
           })
         }
       })
-    }
 
-    setSearchResults(results)
-    setSearching(false)
+      setSearchResults(results)
+    } finally {
+      setSearching(false)
+    }
   }
 
   function handleResultClick(result: SearchResult) {

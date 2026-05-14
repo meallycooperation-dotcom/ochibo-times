@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { UserPlus } from 'lucide-react'
 import { AuthShell } from '../components/AuthShell'
 import { supabase } from '../lib/supabase'
+import { upsertCachedProfile } from '../lib/cache'
 
 export function SignupPage() {
   const navigate = useNavigate()
@@ -47,6 +48,14 @@ export function SignupPage() {
       if (profileError) {
         throw profileError
       }
+
+      await upsertCachedProfile({
+        id: data.user.id,
+        name,
+        email: email.trim().toLowerCase(),
+        role: 'user',
+        avatar_url: null,
+      })
 
       setMessage(
         'Signup successful. Check your email if confirmation is enabled, then sign in.'

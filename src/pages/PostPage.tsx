@@ -2,8 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { CalendarDays, ChevronLeft, Sparkles } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import type { BlogPost } from '../lib/types'
+import type { BlogPost, PageView } from '../lib/types'
 import { EmptyState, SectionHeading } from '../components/SiteLayout'
+import {
+  addCachedPageView,
+  getCachedPosts,
+  syncBlogPosts,
+} from '../lib/cache'
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat('en', {
@@ -29,26 +34,32 @@ export function PostPage() {
 
     async function loadPost() {
       setLoading(true)
-      const { data, error: fetchError } = await supabase
-        .from('blog_posts')
-        .select('*')
-        .eq('slug', slug)
-        .eq('published', true)
-        .maybeSingle()
 
-      if (!active) {
-        return
-      }
+      try {
+        await syncBlogPosts()
+        const cachedPosts = await getCachedPosts()
+        const currentPost =
+          cachedPosts.find((entry) => entry.slug === slug && (entry.status === 'published' || entry.published)) ??
+          null
 
-      if (fetchError) {
-        setError(fetchError.message)
-        setPost(null)
-      } else {
-        setPost((data as BlogPost) ?? null)
+        if (!active) {
+          return
+        }
+
+        setPost(currentPost)
         setError(null)
-      }
+      } catch (fetchError) {
+        if (!active) {
+          return
+        }
 
-      setLoading(false)
+        setError(fetchError instanceof Error ? fetchError.message : 'Failed to load post')
+        setPost(null)
+      } finally {
+        if (active) {
+          setLoading(false)
+        }
+      }
     }
 
     loadPost()
@@ -67,12 +78,19 @@ export function PostPage() {
     viewedSlug.current = currentPost.slug
 
     async function recordView() {
-      const { error: insertError } = await supabase
+      const { data, error: insertError } = await supabase
         .from('page_views')
         .insert([{ post_id: currentPost.id, user_agent: navigator.userAgent }])
+        .select('id, post_id, viewed_at')
+        .single()
 
       if (insertError) {
         console.error('Failed to record view', insertError)
+        return
+      }
+
+      if (data) {
+        await addCachedPageView(data as PageView)
       }
     }
 
@@ -129,7 +147,7 @@ export function PostPage() {
           <CalendarDays size={14} />
           {formatDate(post.created_at)}
         </span>
-        <span>{post.published ? 'Published' : 'Draft'}</span>
+        <span>{post.status === 'published' || post.published ? 'Published' : 'Draft'}</span>
       </div>
 
       {post.featured_image ? (

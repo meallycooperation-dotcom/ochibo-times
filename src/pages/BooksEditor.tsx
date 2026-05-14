@@ -1,7 +1,17 @@
 import { useState, useEffect, type FormEvent } from 'react'
 import { ArrowLeft, Plus, Save, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import type { Book, BookChapter } from '../lib/types'
+import type { Book, BookChapter, Draft } from '../lib/types'
+import {
+  getCachedBookChapters,
+  getLatestCachedDraft,
+  replaceCachedChapters,
+  removeCachedDraft,
+  saveCachedDraft,
+  syncBookChapters,
+  syncDrafts,
+  upsertCachedBook,
+} from '../lib/cache'
 
 /* eslint-disable react-hooks/set-state-in-effect */
 
@@ -46,30 +56,86 @@ function slugify(value: string) {
     .replace(/(^-|-$)+/g, '')
 }
 
+type BookDraftSnapshot = {
+  slug: string
+  description: string
+  chapters: ChapterFormState[]
+}
+
+function parseBookDraftContent(raw: string | null): BookDraftSnapshot {
+  if (!raw) {
+    return { slug: '', description: '', chapters: [] }
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<BookDraftSnapshot>
+    return {
+      slug: typeof parsed.slug === 'string' ? parsed.slug : '',
+      description: typeof parsed.description === 'string' ? parsed.description : '',
+      chapters: Array.isArray(parsed.chapters)
+        ? parsed.chapters
+            .map((chapter) => ({
+              title: typeof chapter?.title === 'string' ? chapter.title : '',
+              chapter_number: typeof chapter?.chapter_number === 'number' ? chapter.chapter_number : 1,
+              content: typeof chapter?.content === 'string' ? chapter.content : '',
+              image_url: typeof chapter?.image_url === 'string' ? chapter.image_url : '',
+              id: typeof chapter?.id === 'string' ? chapter.id : undefined,
+            }))
+            .filter((chapter) => chapter.title || chapter.content)
+        : [],
+    }
+  } catch {
+    return { slug: '', description: raw, chapters: [] }
+  }
+}
+
+function buildBookDraftContent(bookForm: BookFormState, chapters: ChapterFormState[]) {
+  return JSON.stringify({
+    slug: bookForm.slug || slugify(bookForm.title),
+    description: bookForm.description,
+    chapters: chapters.map((chapter) => ({
+      id: chapter.id,
+      title: chapter.title,
+      chapter_number: chapter.chapter_number,
+      content: chapter.content,
+      image_url: chapter.image_url,
+    })),
+  })
+}
+
 interface BooksEditorProps {
   sessionUserId: string | null
   editingBook?: Book | null
+  draftSeed?: Draft | null
+  onDraftConsumed?: () => void
   onSave: () => void
 }
 
-export function BooksEditor({ sessionUserId, editingBook, onSave }: BooksEditorProps) {
+export function BooksEditor({ sessionUserId, editingBook, draftSeed, onDraftConsumed, onSave }: BooksEditorProps) {
   const [bookForm, setBookForm] = useState<BookFormState>(emptyBookForm)
   const [chapters, setChapters] = useState<ChapterFormState[]>([{ ...emptyChapter }])
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [savingDraft, setSavingDraft] = useState(false)
+  const [draftId, setDraftId] = useState<string | null>(null)
+  const [draftLoaded, setDraftLoaded] = useState(false)
 
   useEffect(() => {
     if (editingBook) {
+      const book = editingBook
+      setDraftId(null)
+      setDraftLoaded(true)
       setBookForm({
-        id: editingBook.id,
-        title: editingBook.title,
-        slug: editingBook.slug,
-        description: editingBook.description ?? '',
-        cover_image: editingBook.cover_image ?? '',
-        published: editingBook.published,
+        id: book.id,
+        title: book.title,
+        slug: book.slug,
+        description: book.description ?? '',
+        cover_image: book.cover_image ?? '',
+        published: book.published,
       })
     } else {
       setBookForm(emptyBookForm)
+      setDraftLoaded(false)
     }
   }, [editingBook])
 
@@ -82,13 +148,13 @@ export function BooksEditor({ sessionUserId, editingBook, onSave }: BooksEditorP
     const bookId = editingBook.id
 
     async function load() {
-      const { data } = await supabase
-        .from('book_chapters')
-        .select('*')
-        .eq('book_id', bookId)
-        .order('chapter_number', { ascending: true })
+      await syncBookChapters()
+      const cachedChapters = await getCachedBookChapters()
+      const data = cachedChapters
+        .filter((chapter) => chapter.book_id === bookId)
+        .sort((left, right) => left.chapter_number - right.chapter_number)
 
-      if (data && data.length > 0) {
+      if (data.length > 0) {
         setChapters(
           data.map((c: BookChapter) => ({
             id: c.id,
@@ -98,10 +164,99 @@ export function BooksEditor({ sessionUserId, editingBook, onSave }: BooksEditorP
             image_url: c.image_url ?? '',
           })),
         )
+      } else {
+        setChapters([{ ...emptyChapter }])
       }
     }
     void load()
   }, [editingBook])
+
+  useEffect(() => {
+    if (editingBook || !sessionUserId || draftLoaded || draftSeed) {
+      return
+    }
+
+    const userId = sessionUserId
+    let active = true
+
+    async function loadDraft() {
+      try {
+        await syncDrafts(userId)
+        const draft = await getLatestCachedDraft(userId, 'book')
+        if (!active || !draft) {
+          return
+        }
+
+        const snapshot = parseBookDraftContent(draft.content)
+        setDraftId(draft.id)
+        setDraftLoaded(true)
+        setBookForm({
+          id: '',
+          title: draft.title,
+          slug: snapshot.slug || slugify(draft.title),
+          description: draft.excerpt ?? snapshot.description,
+          cover_image: draft.cover_image ?? '',
+          published: true,
+        })
+        if (snapshot.chapters.length > 0) {
+          setChapters(
+            snapshot.chapters.map((chapter, index) => ({
+              id: chapter.id,
+              title: chapter.title,
+              chapter_number: chapter.chapter_number || index + 1,
+              content: chapter.content,
+              image_url: chapter.image_url,
+            })),
+          )
+        }
+      } catch (error) {
+        if (!active) {
+          return
+        }
+
+        setStatusMessage(error instanceof Error ? error.message : 'Failed to load draft')
+      }
+    }
+
+    void loadDraft()
+
+    return () => {
+      active = false
+    }
+  }, [editingBook, sessionUserId, draftLoaded, draftSeed])
+
+  useEffect(() => {
+    if (editingBook || !draftSeed) {
+      return
+    }
+
+    const snapshot = parseBookDraftContent(draftSeed.content)
+    setDraftId(draftSeed.id)
+    setDraftLoaded(true)
+    setBookForm({
+      id: '',
+      title: draftSeed.title,
+      slug: snapshot.slug || slugify(draftSeed.title),
+      description: draftSeed.excerpt ?? snapshot.description,
+      cover_image: draftSeed.cover_image ?? '',
+      published: true,
+    })
+    if (snapshot.chapters.length > 0) {
+      setChapters(
+        snapshot.chapters.map((chapter, index) => ({
+          id: chapter.id,
+          title: chapter.title,
+          chapter_number: chapter.chapter_number || index + 1,
+          content: chapter.content,
+          image_url: chapter.image_url,
+        })),
+      )
+    } else {
+      setChapters([{ ...emptyChapter }])
+    }
+
+    onDraftConsumed?.()
+  }, [editingBook, draftSeed, onDraftConsumed])
 
   function addChapter() {
     setChapters([...chapters, { ...emptyChapter, chapter_number: chapters.length + 1 }])
@@ -119,6 +274,62 @@ export function BooksEditor({ sessionUserId, editingBook, onSave }: BooksEditorP
     const updated = [...chapters]
     updated[index] = { ...updated[index], [field]: value }
     setChapters(updated)
+  }
+
+  async function clearDraft() {
+    const ownerId = draftSeed?.user_id ?? sessionUserId
+    if (!ownerId || !draftId) {
+      return
+    }
+
+    await supabase.from('drafts').delete().eq('id', draftId).eq('user_id', ownerId)
+    await removeCachedDraft(ownerId, draftId)
+    setDraftId(null)
+  }
+
+  async function saveDraft() {
+    const ownerId = draftSeed?.user_id ?? sessionUserId
+    if (!ownerId || !bookForm.title.trim()) {
+      setStatusMessage('Draft title is required.')
+      return
+    }
+
+    setSavingDraft(true)
+    setStatusMessage(null)
+
+    const now = new Date().toISOString()
+    const validChapters = chapters.filter((chapter) => chapter.title.trim() || chapter.content.trim())
+    const firstChapter = validChapters[0]
+    const draftRecord: Draft = {
+      id: draftId ?? crypto.randomUUID(),
+      user_id: ownerId,
+      type: 'book',
+      title: bookForm.title.trim(),
+      content: buildBookDraftContent(bookForm, validChapters),
+      excerpt: bookForm.description || null,
+      cover_image: bookForm.cover_image || null,
+      chapter_title: firstChapter?.title ?? null,
+      chapter_number: firstChapter?.chapter_number ?? null,
+      category: null,
+      source_id: editingBook?.id ?? null,
+      last_saved_at: now,
+      is_ready: false,
+      created_at: now,
+      updated_at: now,
+    }
+
+    const { data, error } = await supabase.from('drafts').upsert(draftRecord).select('*').single()
+    if (error) {
+      setStatusMessage(error.message)
+      setSavingDraft(false)
+      return
+    }
+
+    await saveCachedDraft(data as Draft)
+    setDraftId((data as Draft).id)
+    setDraftLoaded(true)
+    setStatusMessage('Draft saved.')
+    setSavingDraft(false)
   }
 
   async function saveBook(event: FormEvent<HTMLFormElement>) {
@@ -149,6 +360,13 @@ export function BooksEditor({ sessionUserId, editingBook, onSave }: BooksEditorP
         return
       }
       bookId = editingBook.id
+      await upsertCachedBook({
+        ...editingBook,
+        ...bookPayload,
+        id: editingBook.id,
+        created_at: editingBook.created_at,
+        updated_at: new Date().toISOString(),
+      })
     } else {
       const { data: bookData, error: bookError } = await supabase.from('books').insert(bookPayload).select().single()
       if (bookError) {
@@ -157,6 +375,7 @@ export function BooksEditor({ sessionUserId, editingBook, onSave }: BooksEditorP
         return
       }
       bookId = bookData.id
+      await upsertCachedBook(bookData as Book)
     }
 
     if (editingBook) {
@@ -181,10 +400,30 @@ export function BooksEditor({ sessionUserId, editingBook, onSave }: BooksEditorP
       }
     }
 
+    await replaceCachedChapters(
+      bookId,
+      validChapters.map(
+        (chapter) =>
+          ({
+            id: chapter.id ?? crypto.randomUUID(),
+            book_id: bookId,
+            title: chapter.title,
+            chapter_number: chapter.chapter_number,
+            content: chapter.content,
+            image_url: chapter.image_url || null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }) as BookChapter,
+      ),
+    )
+    await clearDraft()
+    setDraftLoaded(false)
+
     setStatusMessage('Book saved successfully.')
     setTimeout(() => {
       onSave()
     }, 1000)
+    setSaving(false)
   }
 
   return (
@@ -323,10 +562,23 @@ export function BooksEditor({ sessionUserId, editingBook, onSave }: BooksEditorP
             type="button"
             className="secondary-button"
             onClick={() => {
-              setBookForm(emptyBookForm)
-              setChapters([{ ...emptyChapter }])
+              void saveDraft()
             }}
+            disabled={savingDraft}
           >
+            <Save size={16} />
+            {savingDraft ? 'Saving draft...' : 'Save draft'}
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+          onClick={() => {
+            setBookForm(emptyBookForm)
+            setChapters([{ ...emptyChapter }])
+            setDraftId(null)
+            setDraftLoaded(true)
+          }}
+        >
             Reset
           </button>
         </div>

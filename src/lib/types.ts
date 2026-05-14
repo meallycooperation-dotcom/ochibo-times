@@ -1,4 +1,6 @@
-export type Role = 'user' | 'admin'
+export type Role = 'user' | 'admin' | 'super-admin'
+export type DraftType = 'blog' | 'book'
+export type PostStatus = 'draft' | 'pending' | 'published' | 'rejected'
 
 export interface Profile {
   id: string
@@ -17,6 +19,7 @@ export interface BlogPost {
   featured_image: string | null
   slug: string
   published: boolean
+  status?: PostStatus
   author_id: string | null
   category: string | null
   created_at: string
@@ -50,4 +53,22 @@ export interface BookChapter {
   image_url: string | null
   created_at: string
   updated_at: string | null
+}
+
+export interface Draft {
+  id: string
+  user_id: string
+  type: DraftType
+  title: string
+  content: string | null
+  excerpt: string | null
+  cover_image: string | null
+  chapter_title: string | null
+  chapter_number: number | null
+  category: string | null
+  source_id: string | null
+  last_saved_at: string
+  is_ready: boolean
+  created_at: string
+  updated_at: string
 }

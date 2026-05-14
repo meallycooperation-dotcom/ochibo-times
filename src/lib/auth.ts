@@ -26,5 +26,18 @@ export async function isAdminSession(session: Awaited<ReturnType<typeof getCurre
   }
 
   const profile = await getProfileById(session.user.id)
-  return Boolean(profile && profile.email === session.user.email && profile.role === 'admin')
+  return Boolean(
+    profile &&
+      profile.email === session.user.email &&
+      (profile.role === 'admin' || profile.role === 'super-admin'),
+  )
+}
+
+export async function isSuperAdminSession(session: Awaited<ReturnType<typeof getCurrentSession>>) {
+  if (!session?.user?.id || !session.user.email) {
+    return false
+  }
+
+  const profile = await getProfileById(session.user.id)
+  return Boolean(profile && profile.email === session.user.email && profile.role === 'super-admin')
 }

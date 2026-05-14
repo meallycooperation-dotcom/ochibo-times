@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { UserPlus } from 'lucide-react'
 import { AuthShell } from '../components/AuthShell'
+import { Seo } from '../components/Seo'
 import { supabase } from '../lib/supabase'
 import { upsertCachedProfile } from '../lib/cache'
 
@@ -76,6 +77,7 @@ export function SignupPage() {
       title="Create your account"
       subtitle="Sign up for your personal profile. Admin access is still controlled separately in Supabase."
     >
+      <Seo title="Sign up" description="Create your Ochibo Times account." noindex />
       <form className="auth-form" onSubmit={handleSubmit}>
         <label>
           Full name

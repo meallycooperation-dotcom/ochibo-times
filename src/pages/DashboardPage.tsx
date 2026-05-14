@@ -14,6 +14,7 @@ import {
   UserRound,
 } from 'lucide-react'
 import { SectionHeading, EmptyState } from '../components/SiteLayout'
+import { Seo } from '../components/Seo'
 import { getCurrentSession, getProfileById, isAdminSession } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import type { BlogPost, Book, Draft, PostStatus, Profile } from '../lib/types'
@@ -624,6 +625,7 @@ export function DashboardPage() {
 
   return (
     <div className="dashboard-shell">
+      <Seo title="Dashboard" description="Ochibo Times admin dashboard." noindex />
       <aside className="dashboard-sidebar">
         <div className="dashboard-brand">
           <strong>Ochibo</strong>

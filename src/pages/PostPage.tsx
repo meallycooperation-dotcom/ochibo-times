@@ -3,12 +3,14 @@ import { Link, Navigate, useParams } from 'react-router-dom'
 import { CalendarDays, ChevronLeft, Sparkles } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { BlogPost, PageView } from '../lib/types'
+import { Seo } from '../components/Seo'
 import { EmptyState, SectionHeading } from '../components/SiteLayout'
 import {
   addCachedPageView,
   getCachedPosts,
   syncBlogPosts,
 } from '../lib/cache'
+import { SITE_NAME, buildAbsoluteUrl } from '../lib/seo'
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat('en', {
@@ -101,36 +103,92 @@ export function PostPage() {
     return <Navigate to="/" replace />
   }
 
+  const pageTitle = post ? `${post.title}` : 'Article not found'
+  const pageDescription = post?.excerpt || post?.content.slice(0, 160) || 'Read the full article from Ochibo Times.'
+  const pageImage = post?.featured_image ?? undefined
+  const seo = (
+    <Seo
+      title={pageTitle}
+      description={pageDescription}
+      path={`/post/${slug}`}
+      image={pageImage}
+      noindex={!post}
+      type="article"
+      publishedTime={post?.created_at}
+      modifiedTime={post?.updated_at ?? post?.created_at}
+      author={SITE_NAME}
+      section={post?.category ?? 'Blogs'}
+      jsonLd={
+        post
+          ? {
+              '@context': 'https://schema.org',
+              '@type': 'NewsArticle',
+              headline: post.title,
+              description: pageDescription,
+              datePublished: post.created_at,
+              dateModified: post.updated_at ?? post.created_at,
+              image: pageImage ? [buildAbsoluteUrl(pageImage)] : undefined,
+              mainEntityOfPage: buildAbsoluteUrl(`/post/${post.slug}`),
+              author: {
+                '@type': 'Organization',
+                name: SITE_NAME,
+              },
+              publisher: {
+                '@type': 'Organization',
+                name: SITE_NAME,
+                logo: {
+                  '@type': 'ImageObject',
+                  url: buildAbsoluteUrl('/favicon.svg'),
+                },
+              },
+            }
+          : undefined
+      }
+    />
+  )
+
   if (loading) {
     return (
-      <div className="content-section">
-        <div className="loading-post" />
-      </div>
+      <>
+        {seo}
+        <div className="content-section">
+          <div className="loading-post" />
+        </div>
+      </>
     )
   }
 
   if (error) {
-    return <EmptyState title="Could not load post" description={error} />
+    return (
+      <>
+        {seo}
+        <EmptyState title="Could not load post" description={error} />
+      </>
+    )
   }
 
   if (!post) {
     return (
-      <EmptyState
-        icon={<Sparkles size={20} />}
-        title="Post not found"
-        description="The article may have been removed or is still unpublished."
-        action={
-          <Link to="/" className="primary-button">
-            <ChevronLeft size={16} />
-            Back home
-          </Link>
-        }
-      />
+      <>
+        {seo}
+        <EmptyState
+          icon={<Sparkles size={20} />}
+          title="Post not found"
+          description="The article may have been removed or is still unpublished."
+          action={
+            <Link to="/" className="primary-button">
+              <ChevronLeft size={16} />
+              Back home
+            </Link>
+          }
+        />
+      </>
     )
   }
 
   return (
     <article className="post-shell">
+      {seo}
       <Link to="/" className="back-link">
         <ChevronLeft size={16} />
         Back to home

@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { CalendarDays, ChevronLeft, Sparkles } from 'lucide-react'
 import type { Book, BookChapter } from '../lib/types'
+import { Seo } from '../components/Seo'
 import { EmptyState, SectionHeading } from '../components/SiteLayout'
 import { getCachedBookChapters, getCachedBooks, syncBookChapters, syncBooks } from '../lib/cache'
+import { SITE_NAME, buildAbsoluteUrl } from '../lib/seo'
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat('en', {
@@ -75,36 +77,89 @@ export function BookPage() {
     return <Navigate to="/" replace />
   }
 
+  const pageTitle = book ? `${book.title}` : 'Book not found'
+  const pageDescription = book?.description || 'Read books and long-form stories from Ochibo Times.'
+  const pageImage = book?.cover_image ?? undefined
+  const seo = (
+    <Seo
+      title={pageTitle}
+      description={pageDescription}
+      path={`/book/${slug}`}
+      image={pageImage}
+      noindex={!book}
+      type="book"
+      publishedTime={book?.created_at}
+      modifiedTime={book?.updated_at ?? book?.created_at}
+      author={SITE_NAME}
+      jsonLd={
+        book
+          ? {
+              '@context': 'https://schema.org',
+              '@type': 'Book',
+              name: book.title,
+              description: pageDescription,
+              url: buildAbsoluteUrl(`/book/${book.slug}`),
+              image: pageImage ? [buildAbsoluteUrl(pageImage)] : undefined,
+              author: {
+                '@type': 'Organization',
+                name: SITE_NAME,
+              },
+              publisher: {
+                '@type': 'Organization',
+                name: SITE_NAME,
+                logo: {
+                  '@type': 'ImageObject',
+                  url: buildAbsoluteUrl('/favicon.svg'),
+                },
+              },
+            }
+          : undefined
+      }
+    />
+  )
+
   if (loading) {
     return (
-      <div className="content-section">
-        <div className="loading-post" />
-      </div>
+      <>
+        {seo}
+        <div className="content-section">
+          <div className="loading-post" />
+        </div>
+      </>
     )
   }
 
   if (error) {
-    return <EmptyState title="Could not load book" description={error} />
+    return (
+      <>
+        {seo}
+        <EmptyState title="Could not load book" description={error} />
+      </>
+    )
   }
 
   if (!book) {
     return (
-      <EmptyState
-        icon={<Sparkles size={20} />}
-        title="Book not found"
-        description="The book may have been removed or is still unpublished."
-        action={
-          <Link to="/" className="primary-button">
-            <ChevronLeft size={16} />
-            Back home
-          </Link>
-        }
-      />
+      <>
+        {seo}
+        <EmptyState
+          icon={<Sparkles size={20} />}
+          title="Book not found"
+          description="The book may have been removed or is still unpublished."
+          action={
+            <Link to="/" className="primary-button">
+              <ChevronLeft size={16} />
+              Back home
+            </Link>
+          }
+        />
+      </>
     )
   }
 
   return (
     <article className="post-shell">
+      {seo}
       <Link to="/" className="back-link">
         <ChevronLeft size={16} />
         Back to home

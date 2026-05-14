@@ -4,6 +4,7 @@ import { ArrowRight, Bookmark, CalendarDays, Eye, LogIn, PlusCircle, Sparkles } 
 import { getCurrentSession } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import type { BlogPost, Book } from '../lib/types'
+import { Seo } from '../components/Seo'
 import {
   addCachedFavorite,
   getCachedBooks,
@@ -17,6 +18,7 @@ import {
 } from '../lib/cache'
 import { ArticleBadge, EmptyState, SectionHeading } from '../components/SiteLayout'
 import { useSearchContext } from '../context/SearchContext'
+import { SITE_DESCRIPTION, SITE_NAME, buildAbsoluteUrl } from '../lib/seo'
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat('en', {
@@ -142,6 +144,26 @@ export function HomePage() {
 
   return (
     <div className="page-stack">
+      <Seo
+        title={SITE_NAME}
+        description={SITE_DESCRIPTION}
+        path="/"
+        type="website"
+        jsonLd={[
+          {
+            '@context': 'https://schema.org',
+            '@type': 'Organization',
+            name: SITE_NAME,
+            url: buildAbsoluteUrl('/'),
+          },
+          {
+            '@context': 'https://schema.org',
+            '@type': 'WebSite',
+            name: SITE_NAME,
+            url: buildAbsoluteUrl('/'),
+          },
+        ]}
+      />
       <section className="hero-panel">
         <div className="hero-copy">
           {!isAuthenticated ? (

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { LogIn } from 'lucide-react'
 import { AuthShell } from '../components/AuthShell'
+import { Seo } from '../components/Seo'
 import { getCurrentSession, isAdminSession } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 
@@ -69,6 +70,7 @@ export function LoginPage() {
       title="Login"
       subtitle="Sign in to your account to view your profile and access dashboard if you're an admin."
     >
+      <Seo title="Login" description="Sign in to your Ochibo Times account." noindex />
       <form className="auth-form" onSubmit={handleSubmit}>
         <label>
           Email

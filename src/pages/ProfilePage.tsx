@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { Bookmark, LogOut, Save, UserRound } from 'lucide-react'
 import { SectionHeading } from '../components/SiteLayout'
+import { Seo } from '../components/Seo'
 import { getCurrentSession } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import type { BlogPost, Profile } from '../lib/types'
@@ -122,6 +123,7 @@ export function ProfilePage() {
 
   return (
     <div className="profile-shell">
+      <Seo title="Profile" description="Manage your Ochibo Times profile." noindex />
       <SectionHeading
         title="Your Profile"
         description="View and manage your profile information."

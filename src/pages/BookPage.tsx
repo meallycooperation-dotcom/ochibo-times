@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { BookOpen, CalendarDays, ChevronLeft, Play, Sparkles } from 'lucide-react'
 import type { Book, BookChapter } from '../lib/types'
 import { Seo } from '../components/Seo'
 import { EmptyState, SectionHeading } from '../components/SiteLayout'
+import { useAudioPlayer } from '../context/AudioContext'
 import { getCachedBookChapters, getCachedBooks, syncBookChapters, syncBooks } from '../lib/cache'
 import { SITE_NAME, buildAbsoluteUrl } from '../lib/seo'
 
@@ -23,7 +24,7 @@ export function BookPage() {
   const [chapters, setChapters] = useState<BookChapter[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeChapter, setActiveChapter] = useState<BookChapter | null>(null)
+  const { setSourceUrl, play } = useAudioPlayer()
 
   useEffect(() => {
     if (!slug) {
@@ -74,18 +75,14 @@ export function BookPage() {
     }
   }, [slug])
 
-  useEffect(() => {
+  const activeChapter = useMemo(() => {
     if (!chapters.length) {
-      setActiveChapter(null)
-      return
+      return null
     }
 
     const searchParams = new URLSearchParams(location.search)
     const requestedChapterId = searchParams.get('chapter')
-    const requestedChapter =
-      chapters.find((chapter) => chapter.id === requestedChapterId) ?? chapters[0] ?? null
-
-    setActiveChapter(requestedChapter)
+    return chapters.find((chapter) => chapter.id === requestedChapterId) ?? chapters[0] ?? null
   }, [chapters, location.search])
 
   if (!slug) {
@@ -207,7 +204,9 @@ export function BookPage() {
               value={activeChapter?.id || ''}
               onChange={(e) => {
                 const chapter = chapters.find((c) => c.id === e.target.value)
-                if (chapter) setActiveChapter(chapter)
+                if (chapter) {
+                  navigate(`/book/${slug}?chapter=${chapter.id}`, { replace: true })
+                }
               }}
             >
               {chapters.map((chapter) => (
@@ -245,20 +244,35 @@ export function BookPage() {
       </button>
 
       {activeChapter?.audio_url ? (
-        <button
-          type="button"
-          className="audio-fab audio-fab-compact"
-          onClick={() => navigate(`/book/${slug}/audio?chapter=${activeChapter.id}`)}
-          aria-label="Open audiobook player"
-        >
-          <span className="audio-fab-compact-icon">
-            <BookOpen size={16} />
-          </span>
-          <span className="audio-fab-compact-text">Audiobook</span>
-          <span className="audio-fab-action">
+        <div className="audio-fab audio-fab-compact" aria-label="Audiobook controls">
+          <Link
+            to={`/book/${slug}/audio?chapter=${activeChapter.id}`}
+            className="audio-fab-main"
+            aria-label="Open audiobook player"
+          >
+            <span className="audio-fab-compact-icon">
+              <BookOpen size={16} />
+            </span>
+            <span className="audio-fab-compact-text">Audiobook</span>
+          </Link>
+          <button
+            type="button"
+            className="audio-fab-action"
+            onClick={async (event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              setSourceUrl(activeChapter.audio_url)
+              try {
+                await play()
+              } catch (playError) {
+                console.error('Failed to play audiobook', playError)
+              }
+            }}
+            aria-label="Play audiobook"
+          >
             <Play size={16} />
-          </span>
-        </button>
+          </button>
+        </div>
       ) : null}
     </article>
   )

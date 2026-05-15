@@ -1,31 +1,21 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
   BookOpen,
-  ChevronDown,
   ChevronLeft,
+  ChevronDown,
   ChevronRight,
-  Heart,
-  MoreVertical,
   Pause,
   Play,
   Sparkles,
-  Volume2,
 } from 'lucide-react'
 import type { Book, BookChapter } from '../lib/types'
 import { Seo } from '../components/Seo'
 import { EmptyState } from '../components/SiteLayout'
+import { useAudioPlayer } from '../context/AudioContext'
 import { getCachedBookChapters, getCachedBooks, syncBookChapters, syncBooks } from '../lib/cache'
 import { SITE_NAME, buildAbsoluteUrl } from '../lib/seo'
-
-function formatDate(date: string) {
-  return new Intl.DateTimeFormat('en', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(new Date(date))
-}
 
 function formatPlaybackTime(seconds: number) {
   if (!Number.isFinite(seconds) || seconds < 0) {
@@ -46,11 +36,15 @@ export function BookAudioPage() {
   const [chapters, setChapters] = useState<BookChapter[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeChapter, setActiveChapter] = useState<BookChapter | null>(null)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [duration, setDuration] = useState(0)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const {
+    currentTime,
+    duration,
+    isPlaying,
+    setSourceUrl,
+    seek,
+    play,
+    pause,
+  } = useAudioPlayer()
 
   useEffect(() => {
     if (!slug) {
@@ -101,32 +95,19 @@ export function BookAudioPage() {
     }
   }, [slug])
 
-  useEffect(() => {
+  const activeChapter = useMemo(() => {
     if (!chapters.length) {
-      setActiveChapter(null)
-      return
+      return null
     }
 
     const searchParams = new URLSearchParams(location.search)
     const requestedChapterId = searchParams.get('chapter')
-    const requestedChapter =
-      chapters.find((chapter) => chapter.id === requestedChapterId) ?? chapters[0] ?? null
-
-    setActiveChapter(requestedChapter)
+    return chapters.find((chapter) => chapter.id === requestedChapterId) ?? chapters[0] ?? null
   }, [chapters, location.search])
 
   useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) {
-      return
-    }
-
-    audio.pause()
-    audio.currentTime = 0
-    setIsPlaying(false)
-    setCurrentTime(0)
-    setDuration(0)
-  }, [activeChapter?.audio_url])
+    setSourceUrl(activeChapter?.audio_url ?? null)
+  }, [activeChapter?.audio_url, setSourceUrl])
 
   if (!slug) {
     return <Navigate to="/" replace />
@@ -174,34 +155,21 @@ export function BookAudioPage() {
     return getPlayableChapters().findIndex((chapter) => chapter.id === activeChapter?.id)
   }
 
-  function seek(value: number) {
-    const audio = audioRef.current
-    if (!audio) {
-      return
-    }
-
-    audio.currentTime = value
-    setCurrentTime(value)
-  }
-
   async function togglePlayback() {
-    const audio = audioRef.current
-    if (!audio || !activeChapter?.audio_url) {
+    if (!activeChapter?.audio_url) {
       return
     }
 
-    if (audio.paused) {
-      try {
-        await audio.play()
-        setIsPlaying(true)
-      } catch (playError) {
-        console.error('Failed to play audiobook', playError)
+    try {
+      if (isPlaying) {
+        pause()
+        return
       }
-      return
-    }
 
-    audio.pause()
-    setIsPlaying(false)
+      await play()
+    } catch (playError) {
+      console.error('Failed to play audiobook', playError)
+    }
   }
 
   function goToAdjacent(direction: -1 | 1) {
@@ -216,7 +184,6 @@ export function BookAudioPage() {
       return
     }
 
-    setActiveChapter(playable[nextIndex])
     navigate(`/book/${slug}/audio?chapter=${playable[nextIndex].id}`, { replace: true })
   }
 
@@ -278,24 +245,16 @@ export function BookAudioPage() {
     <article className="audio-page-shell">
       {seo}
       <div className="audio-page-topbar">
-        <Link to={`/book/${book.slug}`} className="audio-back-link">
+        <Link to={`/book/${book.slug}`} className="audio-back-link" aria-label="Back to book">
           <ArrowLeft size={16} />
         </Link>
-        <button type="button" className="audio-top-icon" onClick={minimizePlayer} aria-label="Minimize player">
+        <button type="button" className="audio-top-icon" onClick={minimizePlayer} aria-label="Collapse player">
           <ChevronDown size={16} />
         </button>
       </div>
-
       <div className="audio-player-layout">
         <div className="audio-player-main">
           <div className="audio-player-card audio-hero-card">
-            <div className="audio-hero-top">
-              <p className="eyebrow audio-eyebrow">Audiobook player</p>
-              <button type="button" className="audio-top-icon" aria-label="More options">
-                <MoreVertical size={16} />
-              </button>
-            </div>
-
             <div className="audio-cover-frame">
               {book.cover_image ? (
                 <img className="audio-player-cover" src={book.cover_image} alt={book.title} />
@@ -311,46 +270,13 @@ export function BookAudioPage() {
               <p className="audio-player-subtitle">
                 {activeChapter ? `Chapter ${activeChapter.chapter_number}: ${activeChapter.title}` : 'Select a chapter'}
               </p>
-              <p className="audio-player-book audio-book-about">
+              <p className="audio-book-about">
                 {book.description || 'A book from Ochibo Times.'}
               </p>
             </div>
 
-            <div className="audio-mini-meta">
-              <span>{formatDate(book.created_at)}</span>
-              <span>{book.published ? 'Published' : 'Draft'}</span>
-            </div>
-
             {activeChapter ? (
               <>
-                <div className="audio-player-now audio-now-row">
-                  <span className="audio-player-chapter">Chapter {activeChapter.chapter_number}</span>
-                  <strong>{activeChapter.title}</strong>
-                  <span className="audio-player-book">{book.title}</span>
-                </div>
-
-                <audio
-                  ref={audioRef}
-                  className="chapter-audio-player"
-                  src={activeChapter.audio_url ?? undefined}
-                  preload="metadata"
-                  onLoadedMetadata={(event) => setDuration(event.currentTarget.duration || 0)}
-                  onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
-                  onDurationChange={(event) => setDuration(event.currentTarget.duration || 0)}
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
-                  onEnded={() => setIsPlaying(false)}
-                />
-
-                <div className="audio-quick-actions">
-                  <button type="button" className="audio-ghost-button" aria-label="Like">
-                    <Heart size={16} />
-                  </button>
-                  <button type="button" className="audio-ghost-button" aria-label="Volume">
-                    <Volume2 size={16} />
-                  </button>
-                </div>
-
                 <div className="audio-timeline">
                   <span>{formatPlaybackTime(currentTime)}</span>
                   <input
@@ -398,15 +324,6 @@ export function BookAudioPage() {
         </div>
 
         <aside className="audio-player-sidebar">
-          <div className="panel">
-            <h2>About book</h2>
-            <p>{book.description || 'A book from Ochibo Times.'}</p>
-            <div className="meta-row">
-              <span>{formatDate(book.created_at)}</span>
-              <span>{book.published ? 'Published' : 'Draft'}</span>
-            </div>
-          </div>
-
           {playableChapters.length > 1 ? (
             <div className="panel">
               <h2>Chapters with audio</h2>
@@ -417,7 +334,6 @@ export function BookAudioPage() {
                     key={chapter.id}
                     className={`audio-chapter-pill ${chapter.id === activeChapter?.id ? 'active' : ''}`}
                     onClick={() => {
-                      setActiveChapter(chapter)
                       navigate(`/book/${slug}/audio?chapter=${chapter.id}`, { replace: true })
                     }}
                   >

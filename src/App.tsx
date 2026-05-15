@@ -1,5 +1,6 @@
 import './App.css'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { AudioProvider } from './context/AudioContext'
 import { SiteLayout } from './components/SiteLayout'
 import { BookPage } from './pages/BookPage'
 import { DashboardPage } from './pages/DashboardPage'
@@ -15,22 +16,26 @@ import { SearchProvider } from './context/SearchContext'
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route element={<SearchProvider><SiteLayout /></SearchProvider>}>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/donate" element={<DonatePage />} />
-          <Route path="/post/:slug" element={<PostPage />} />
-          <Route path="/book/:slug/audio" element={<BookAudioPage />} />
-          <Route path="/book/:slug" element={<BookPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-        </Route>
+    <AudioProvider>
+      <BrowserRouter>
+        <SearchProvider>
+          <Routes>
+            <Route element={<SiteLayout />}>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/donate" element={<DonatePage />} />
+              <Route path="/post/:slug" element={<PostPage />} />
+              <Route path="/book/:slug/audio" element={<BookAudioPage />} />
+              <Route path="/book/:slug" element={<BookPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
+            </Route>
 
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/signup" element={<SignupPage />} />
-        <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
-    </BrowserRouter>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/signup" element={<SignupPage />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+        </SearchProvider>
+      </BrowserRouter>
+    </AudioProvider>
   )
 }

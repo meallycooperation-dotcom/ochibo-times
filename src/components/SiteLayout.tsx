@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useEffect, useState, useRef } from 'react'
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { ArrowRight, BookOpen, Home, LayoutDashboard, Search, User, X } from 'lucide-react'
 import { getCurrentSession, getProfileById } from '../lib/auth'
 import {
@@ -30,6 +30,7 @@ function sanitizeSearch(input: string): string {
 
 export function SiteLayout() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [session, setSession] = useState<Awaited<ReturnType<typeof getCurrentSession>> | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [checking, setChecking] = useState(true)
@@ -39,6 +40,7 @@ export function SiteLayout() {
   const [searching, setSearching] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const { categoryFilter, setCategoryFilter } = useSearchContext()
+  const hideHeaderForAudioPage = location.pathname.startsWith('/book/') && location.pathname.endsWith('/audio')
 
   useEffect(() => {
     let active = true
@@ -154,116 +156,118 @@ export function SiteLayout() {
 
   return (
     <div className="site-shell">
-      <header className="site-header">
-        <div className="brand-lockup">
-          <Link to="/" className="brand-mark">
-            Ochibo Times
-          </Link>
-          <p className="brand-tag">Stories, reflections, and fresh articles.</p>
-        </div>
-
-        <nav className="site-nav">
-          <NavLink to="/" end>
-            <Home size={16} />
-            Home
-          </NavLink>
-          <NavLink to="/donate">Donate</NavLink>
-          <button className="nav-search-btn" onClick={() => setSearchOpen(true)} aria-label="Search">
-            <Search size={16} />
-            Search
-          </button>
-          {!checking && !session ? (
-            <>
-              <NavLink to="/signup">Signup</NavLink>
-              <NavLink to="/login">Login</NavLink>
-            </>
-          ) : null}
-          {!checking && session ? (
-            <>
-              <NavLink to="/profile">
-                <User size={16} />
-                Profile
-              </NavLink>
-              {isAdmin && (
-                <NavLink to="/dashboard" className="dashboard-link">
-                  <LayoutDashboard size={16} />
-                  Dashboard
-                </NavLink>
-              )}
-            </>
-          ) : null}
-        </nav>
-
-        <select
-          className="category-filter"
-          value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
-        >
-          <option value="">All</option>
-          <option value="Blogs">Blogs</option>
-          <option value="Entertainment">Entertainment</option>
-          <option value="Events">Events</option>
-          <option value="Leaks">Leaks</option>
-          <option value="Tech">Tech</option>
-          <option value="Music">Music</option>
-          <option value="Clout">Clout</option>
-          <option value="Film">Film</option>
-          <option value="News">News</option>
-          <option value="Sports">Sports</option>
-          <option value="Investigations">Investigations</option>
-          <option value="Hustle">Hustle</option>
-        </select>
-
-        {searchOpen && (
-          <div className="search-overlay" onClick={closeSearch}>
-            <div className="search-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="search-header">
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder="Search posts and books..."
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value)
-                    void handleSearch(e.target.value)
-                  }}
-                  className="search-input"
-                />
-                <button className="search-close" onClick={closeSearch} aria-label="Close search">
-                  <X size={20} />
-                </button>
-              </div>
-
-              {searching && <p className="search-status">Searching...</p>}
-
-              {searchResults.length > 0 ? (
-                <div className="search-results">
-                  {searchResults.map((result) => (
-                    <button
-                      key={`${result.type}-${result.id}`}
-                      className="search-result-item"
-                      onClick={() => handleResultClick(result)}
-                    >
-                      {result.image && (
-                        <img src={result.image} alt="" className="search-result-image" />
-                      )}
-                      <div className="search-result-info">
-                        <span className="search-result-type">{result.type}</span>
-                        <span className="search-result-title">{result.title}</span>
-                        {result.description && (
-                          <span className="search-result-desc">{result.description.slice(0, 80)}...</span>
-                        )}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              ) : searchQuery.length >= 2 && !searching ? (
-                <p className="search-status">No results found for "{searchQuery}"</p>
-              ) : null}
-            </div>
+      {!hideHeaderForAudioPage ? (
+        <header className="site-header">
+          <div className="brand-lockup">
+            <Link to="/" className="brand-mark">
+              Ochibo Times
+            </Link>
+            <p className="brand-tag">Stories, reflections, and fresh articles.</p>
           </div>
-        )}
-      </header>
+
+          <nav className="site-nav">
+            <NavLink to="/" end>
+              <Home size={16} />
+              Home
+            </NavLink>
+            <NavLink to="/donate">Donate</NavLink>
+            <button className="nav-search-btn" onClick={() => setSearchOpen(true)} aria-label="Search">
+              <Search size={16} />
+              Search
+            </button>
+            {!checking && !session ? (
+              <>
+                <NavLink to="/signup">Signup</NavLink>
+                <NavLink to="/login">Login</NavLink>
+              </>
+            ) : null}
+            {!checking && session ? (
+              <>
+                <NavLink to="/profile">
+                  <User size={16} />
+                  Profile
+                </NavLink>
+                {isAdmin && (
+                  <NavLink to="/dashboard" className="dashboard-link">
+                    <LayoutDashboard size={16} />
+                    Dashboard
+                  </NavLink>
+                )}
+              </>
+            ) : null}
+          </nav>
+
+          <select
+            className="category-filter"
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+          >
+            <option value="">All</option>
+            <option value="Blogs">Blogs</option>
+            <option value="Entertainment">Entertainment</option>
+            <option value="Events">Events</option>
+            <option value="Leaks">Leaks</option>
+            <option value="Tech">Tech</option>
+            <option value="Music">Music</option>
+            <option value="Clout">Clout</option>
+            <option value="Film">Film</option>
+            <option value="News">News</option>
+            <option value="Sports">Sports</option>
+            <option value="Investigations">Investigations</option>
+            <option value="Hustle">Hustle</option>
+          </select>
+
+          {searchOpen && (
+            <div className="search-overlay" onClick={closeSearch}>
+              <div className="search-modal" onClick={(e) => e.stopPropagation()}>
+                <div className="search-header">
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    placeholder="Search posts and books..."
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value)
+                      void handleSearch(e.target.value)
+                    }}
+                    className="search-input"
+                  />
+                  <button className="search-close" onClick={closeSearch} aria-label="Close search">
+                    <X size={20} />
+                  </button>
+                </div>
+
+                {searching && <p className="search-status">Searching...</p>}
+
+                {searchResults.length > 0 ? (
+                  <div className="search-results">
+                    {searchResults.map((result) => (
+                      <button
+                        key={`${result.type}-${result.id}`}
+                        className="search-result-item"
+                        onClick={() => handleResultClick(result)}
+                      >
+                        {result.image && (
+                          <img src={result.image} alt="" className="search-result-image" />
+                        )}
+                        <div className="search-result-info">
+                          <span className="search-result-type">{result.type}</span>
+                          <span className="search-result-title">{result.title}</span>
+                          {result.description && (
+                            <span className="search-result-desc">{result.description.slice(0, 80)}...</span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : searchQuery.length >= 2 && !searching ? (
+                  <p className="search-status">No results found for "{searchQuery}"</p>
+                ) : null}
+              </div>
+            </div>
+          )}
+        </header>
+      ) : null}
 
       <main className="site-main">
         <Outlet />

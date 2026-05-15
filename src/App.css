@@ -1070,7 +1070,7 @@
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 12px;
-  min-width: 170px;
+  min-width: 220px;
 }
 
 .audio-fab-main {
@@ -1080,6 +1080,35 @@
   min-width: 0;
   color: inherit;
   text-decoration: none;
+}
+
+.audio-fab-progress-wrap {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.audio-fab-progress-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.audio-fab-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #ffb06d, #e45a6f);
+  box-shadow: 0 0 18px rgba(228, 90, 111, 0.32);
+}
+
+.audio-fab-progress-meta {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
 }
 
 .audio-fab:hover {

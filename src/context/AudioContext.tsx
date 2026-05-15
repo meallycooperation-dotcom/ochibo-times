@@ -32,6 +32,10 @@ export function AudioProvider({ children }: { children: ReactNode }) {
   const [isPlaying, setIsPlaying] = useState(false)
 
   const setSourceUrl = useCallback((url: string | null) => {
+    if (url === sourceUrl) {
+      return
+    }
+
     setSourceUrlState(url)
     setCurrentTime(0)
     setDuration(0)
@@ -42,7 +46,7 @@ export function AudioProvider({ children }: { children: ReactNode }) {
       audio.src = url ?? ''
       audio.load()
     }
-  }, [])
+  }, [sourceUrl])
 
   const seek = useCallback((value: number) => {
     const audio = audioRef.current

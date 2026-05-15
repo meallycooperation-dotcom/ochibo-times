@@ -40,6 +40,7 @@ export function BookAudioPage() {
     currentTime,
     duration,
     isPlaying,
+    sourceUrl,
     setSourceUrl,
     seek,
     play,
@@ -106,8 +107,14 @@ export function BookAudioPage() {
   }, [chapters, location.search])
 
   useEffect(() => {
-    setSourceUrl(activeChapter?.audio_url ?? null)
-  }, [activeChapter?.audio_url, setSourceUrl])
+    if (!activeChapter?.audio_url) {
+      return
+    }
+
+    if (sourceUrl !== activeChapter.audio_url) {
+      setSourceUrl(activeChapter.audio_url)
+    }
+  }, [activeChapter?.audio_url, setSourceUrl, sourceUrl])
 
   if (!slug) {
     return <Navigate to="/" replace />

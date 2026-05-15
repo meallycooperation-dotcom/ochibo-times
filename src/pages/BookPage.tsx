@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { BookOpen, CalendarDays, ChevronLeft, Play, Sparkles } from 'lucide-react'
+import { CalendarDays, ChevronLeft, Maximize2, Pause, Play, Sparkles } from 'lucide-react'
 import type { Book, BookChapter } from '../lib/types'
 import { Seo } from '../components/Seo'
 import { EmptyState, SectionHeading } from '../components/SiteLayout'
@@ -16,6 +16,17 @@ function formatDate(date: string) {
   }).format(new Date(date))
 }
 
+function formatPlaybackTime(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    return '0:00'
+  }
+
+  const wholeSeconds = Math.floor(seconds)
+  const minutes = Math.floor(wholeSeconds / 60)
+  const remainingSeconds = wholeSeconds % 60
+  return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`
+}
+
 export function BookPage() {
   const { slug } = useParams()
   const navigate = useNavigate()
@@ -24,7 +35,7 @@ export function BookPage() {
   const [chapters, setChapters] = useState<BookChapter[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const { setSourceUrl, play } = useAudioPlayer()
+  const { currentTime, duration, isPlaying, sourceUrl, setSourceUrl, play } = useAudioPlayer()
 
   useEffect(() => {
     if (!slug) {
@@ -251,9 +262,26 @@ export function BookPage() {
             aria-label="Open audiobook player"
           >
             <span className="audio-fab-compact-icon">
-              <BookOpen size={16} />
+              <Maximize2 size={16} />
             </span>
-            <span className="audio-fab-compact-text">Audiobook</span>
+            {sourceUrl === activeChapter.audio_url && (isPlaying || currentTime > 0 || duration > 0) ? (
+              <span className="audio-fab-progress-wrap">
+                <span className="audio-fab-progress-track" aria-hidden="true">
+                  <span
+                    className="audio-fab-progress-fill"
+                    style={{
+                      width:
+                        duration > 0 ? `${Math.min(100, Math.max(0, (currentTime / duration) * 100))}%` : '0%',
+                    }}
+                  />
+                </span>
+                <span className="audio-fab-progress-meta">
+                  {formatPlaybackTime(currentTime)} / {formatPlaybackTime(duration)}
+                </span>
+              </span>
+            ) : (
+              <span className="audio-fab-compact-text">Audiobook</span>
+            )}
           </Link>
           <button
             type="button"
@@ -270,7 +298,7 @@ export function BookPage() {
             }}
             aria-label="Play audiobook"
           >
-            <Play size={16} />
+            {isPlaying ? <Pause size={16} /> : <Play size={16} />}
           </button>
         </div>
       ) : null}

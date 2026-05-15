@@ -18,7 +18,7 @@ type AudioContextType = {
   sourceUrl: string | null
   setSourceUrl: (url: string | null) => void
   seek: (value: number) => void
-  play: () => Promise<void>
+  play: (url?: string) => Promise<void>
   pause: () => void
 }
 
@@ -36,16 +36,17 @@ export function AudioProvider({ children }: { children: ReactNode }) {
       return
     }
 
+    const audio = audioRef.current
+    if (audio) {
+      audio.pause()
+      audio.src = url ?? ''
+      audio.load()
+    }
+
     setSourceUrlState(url)
     setCurrentTime(0)
     setDuration(0)
     setIsPlaying(false)
-
-    const audio = audioRef.current
-    if (audio) {
-      audio.src = url ?? ''
-      audio.load()
-    }
   }, [sourceUrl])
 
   const seek = useCallback((value: number) => {
@@ -58,22 +59,37 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     setCurrentTime(value)
   }, [])
 
-  const play = useCallback(async () => {
-    const audio = audioRef.current
-    if (!audio || !audio.src) {
-      return
-    }
-
-    await audio.play()
-  }, [])
-
-  const pause = useCallback(() => {
+  const play = useCallback(async (url?: string) => {
     const audio = audioRef.current
     if (!audio) {
       return
     }
 
+    const targetUrl = url ?? sourceUrl
+    if (!targetUrl) {
+      return
+    }
+
+    if (audio.src !== targetUrl) {
+      audio.src = targetUrl
+      audio.load()
+    }
+
+    try {
+      await audio.play()
+    } catch (err) {
+      console.error('Play failed:', err)
+    }
+  }, [sourceUrl])
+
+  const pause = useCallback(() => {
+    const audio = audioRef.current
+    if (!audio || audio.paused) {
+      return
+    }
+
     audio.pause()
+    setIsPlaying(false)
   }, [])
 
   const value = useMemo(
@@ -97,7 +113,6 @@ export function AudioProvider({ children }: { children: ReactNode }) {
       <audio
         ref={audioRef}
         className="persistent-audio-player"
-        src={sourceUrl ?? undefined}
         preload="metadata"
         onLoadedMetadata={(event) => setDuration(event.currentTarget.duration || 0)}
         onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}

@@ -173,7 +173,7 @@ export function BookAudioPage() {
         return
       }
 
-      await play()
+      await play(activeChapter.audio_url)
     } catch (playError) {
       console.error('Failed to play audiobook', playError)
     }

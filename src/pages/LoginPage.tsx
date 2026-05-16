@@ -68,7 +68,7 @@ export function LoginPage() {
   return (
     <AuthShell
       title="Login"
-      subtitle="Sign in to your account to view your profile and access dashboard if you're an admin."
+      subtitle="Sign in to your account to view your profile and enyoy better perks."
     >
       <Seo title="Login" description="Sign in to your Ochibo Times account." noindex />
       <form className="auth-form" onSubmit={handleSubmit}>

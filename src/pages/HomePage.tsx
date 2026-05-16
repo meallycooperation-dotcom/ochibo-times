@@ -171,7 +171,7 @@ export function HomePage() {
               <ArticleBadge>Fresh articles, reflections, and updates</ArticleBadge>
               <SectionHeading
                 title="Welcome to Ochibo Times"
-                description="Discover thoughtful stories and clean writing. Sign in or create an account to get started in bookmarking and adding your favourite reads to favourite and save them."
+                description="Discover thoughtful stories and clean writing. Sign in or create an account to fevourite, make purchases and enyoy perks."
               />
 
               <div className="hero-actions">

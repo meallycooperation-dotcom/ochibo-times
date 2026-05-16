@@ -75,7 +75,7 @@ export function SignupPage() {
   return (
     <AuthShell
       title="Create your account"
-      subtitle="Sign up for your personal profile. Admin access is still controlled separately in Supabase."
+      subtitle="Sign up for your personal profile."
     >
       <Seo title="Sign up" description="Create your Ochibo Times account." noindex />
       <form className="auth-form" onSubmit={handleSubmit}>

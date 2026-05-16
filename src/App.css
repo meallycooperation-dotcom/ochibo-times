@@ -19,10 +19,25 @@
 }
 
 .brand-mark {
-  font-family: Georgia, 'Times New Roman', serif;
   font-size: clamp(1.8rem, 3vw, 2.5rem);
   font-weight: 700;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: baseline;
+  gap: 0.15em;
+}
+
+.brand-sans {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+.brand-blackletter {
+  font-family: 'UnifrakturMaguntia', 'Old English Text MT', 'Cloister Black', Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  text-shadow: 0.5px 0 0 currentColor, -0.5px 0 0 currentColor, 0 0.5px 0 currentColor, 0 -0.5px 0 currentColor;
 }
 
 .brand-tag {

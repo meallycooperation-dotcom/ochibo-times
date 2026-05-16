@@ -160,9 +160,10 @@ export function SiteLayout() {
         <header className="site-header">
           <div className="brand-lockup">
             <Link to="/" className="brand-mark">
-              Ochibo Times
+              <span className="brand-sans">ochibo</span>
+              <span className="brand-blackletter">times</span>
             </Link>
-            <p className="brand-tag">Stories, reflections, and fresh articles.</p>
+            <p className="brand-tag">Stories, reflections, and Great books.</p>
           </div>
 
           <nav className="site-nav">

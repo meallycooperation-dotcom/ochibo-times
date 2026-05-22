@@ -73,7 +73,7 @@ export function MerchandisePage() {
         <EmptyState
           icon={<ShoppingBag size={18} />}
           title="No merchandise yet"
-          description="Products added in the admin dashboard will appear here."
+          description="Products added will and should appear here."
           action={
             <Link to="/" className="secondary-button">
               Back home

@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { CalendarDays, ChevronLeft, Maximize2, Pause, Play, Sparkles } from 'lucide-react'
-import type { Book, BookChapter } from '../lib/types'
+import type { Book, BookChapter, BookFormat } from '../lib/types'
 import { Seo } from '../components/Seo'
 import { EmptyState, SectionHeading } from '../components/SiteLayout'
 import { useAudioPlayer } from '../context/AudioContext'
+import { getCurrentSession } from '../lib/auth'
 import { getCachedBookChapters, getCachedBooks, syncBookChapters, syncBooks } from '../lib/cache'
 import { SITE_NAME, buildAbsoluteUrl } from '../lib/seo'
+import { supabase } from '../lib/supabase'
+import { initializePayment } from '../lib/payments'
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat('en', {
@@ -27,12 +30,26 @@ function formatPlaybackTime(seconds: number) {
   return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`
 }
 
+function trimToWords(text: string, maxWords: number) {
+  const words = text.trim().split(/\s+/).filter(Boolean)
+  if (words.length <= maxWords) {
+    return text.trim()
+  }
+
+  return `${words.slice(0, maxWords).join(' ')}...`
+}
+
 export function BookPage() {
   const { slug } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
   const [book, setBook] = useState<Book | null>(null)
   const [chapters, setChapters] = useState<BookChapter[]>([])
+  const [bookPrice, setBookPrice] = useState<number>(0)
+  const [bookFormats, setBookFormats] = useState<BookFormat[]>([])
+  const [isPurchaseOpen, setIsPurchaseOpen] = useState(false)
+  const [checkoutMessage, setCheckoutMessage] = useState<string | null>(null)
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { currentTime, duration, isPlaying, sourceUrl, setSourceUrl, play } = useAudioPlayer()
@@ -51,6 +68,13 @@ export function BookPage() {
         await Promise.all([syncBooks(), syncBookChapters()])
         const [cachedBooks, cachedChapters] = await Promise.all([getCachedBooks(), getCachedBookChapters()])
         const currentBook = cachedBooks.find((entry) => entry.slug === slug && entry.published) ?? null
+        const { data: formats } = currentBook
+          ? await supabase
+              .from('book_formats')
+              .select('id, book_id, type, price, stock, ebook_file_url, active, created_at')
+              .eq('book_id', currentBook.id)
+              .eq('active', true)
+          : { data: null }
         const currentChapters = currentBook
           ? cachedChapters
               .filter((chapter) => chapter.book_id === currentBook.id)
@@ -62,6 +86,11 @@ export function BookPage() {
         }
 
         setBook(currentBook)
+        const activeFormats = ((formats ?? []) as BookFormat[]).filter(
+          (format) => format.type === 'ebook' || format.type === 'physical',
+        )
+        setBookFormats(activeFormats)
+        setBookPrice(activeFormats.length > 0 ? Math.min(...activeFormats.map((format) => Number(format.price) || 0)) : 0)
         setChapters(currentChapters)
         setError(null)
       } catch (fetchError) {
@@ -72,6 +101,8 @@ export function BookPage() {
         setError(fetchError instanceof Error ? fetchError.message : 'Failed to load book')
         setBook(null)
         setChapters([])
+        setBookFormats([])
+        setBookPrice(0)
       } finally {
         if (active) {
           setLoading(false)
@@ -95,6 +126,67 @@ export function BookPage() {
     const requestedChapterId = searchParams.get('chapter')
     return chapters.find((chapter) => chapter.id === requestedChapterId) ?? chapters[0] ?? null
   }, [chapters, location.search])
+  const activeChapterPreview = useMemo(() => {
+    if (!activeChapter) {
+      return ''
+    }
+
+    return bookPrice > 0 ? trimToWords(activeChapter.content, 130) : activeChapter.content
+  }, [activeChapter, bookPrice])
+  const isPaidBook = bookPrice > 0
+
+  async function purchaseBook(format: BookFormat) {
+    if (!book) {
+      return
+    }
+
+    try {
+      setCheckoutLoading(true)
+      setCheckoutMessage(null)
+
+      const session = await getCurrentSession()
+      const email = session?.user?.email
+      const userId = session?.user?.id
+
+      if (!session || !email || !userId) {
+        navigate('/login')
+        return
+      }
+
+      const response = await initializePayment({
+        email,
+        amount: Number(format.price) || 0,
+        orderItems: [
+          {
+            item_type: 'book',
+            quantity: 1,
+            unit_price: Number(format.price) || 0,
+            book_format_id: format.id,
+            label: `${book.title} (${format.type})`,
+          },
+        ],
+        metadata: {
+          userId,
+          kind: 'book',
+          bookId: book.id,
+          bookFormatId: format.id,
+          formatType: format.type,
+        },
+        callbackUrl: `${window.location.origin}/book/${book.slug}`,
+      })
+
+      if (response.authorization_url) {
+        window.location.assign(response.authorization_url)
+        return
+      }
+
+      setCheckoutMessage('Payment could not be started.')
+    } catch (purchaseError) {
+      setCheckoutMessage(purchaseError instanceof Error ? purchaseError.message : 'Purchase failed.')
+    } finally {
+      setCheckoutLoading(false)
+    }
+  }
 
   if (!slug) {
     return <Navigate to="/" replace />
@@ -200,6 +292,7 @@ export function BookPage() {
           {formatDate(book.created_at)}
         </span>
         <span>{book.published ? 'Published' : 'Draft'}</span>
+        {isPaidBook ? <span>Price: {bookPrice.toLocaleString()}</span> : null}
       </div>
 
       {book.cover_image ? (
@@ -237,7 +330,18 @@ export function BookPage() {
               {activeChapter.image_url && (
                 <img className="chapter-image" src={activeChapter.image_url} alt={activeChapter.title} />
               )}
-              <div className="post-body">{activeChapter.content}</div>
+              <div className="post-body">{activeChapterPreview}</div>
+              {isPaidBook ? (
+                <div className="book-purchase-box">
+                  <p className="book-purchase-note">
+                    This book is a paid title. Preview ends after 130 words.
+                  </p>
+                  <button type="button" className="primary-button" onClick={() => setIsPurchaseOpen(true)}>
+                    Purchase book
+                  </button>
+                  {checkoutMessage ? <p className="book-purchase-note">{checkoutMessage}</p> : null}
+                </div>
+              ) : null}
             </>
           )}
         </div>
@@ -300,6 +404,43 @@ export function BookPage() {
           >
             {isPlaying ? <Pause size={16} /> : <Play size={16} />}
           </button>
+        </div>
+      ) : null}
+
+      {isPurchaseOpen ? (
+        <div className="search-overlay" onClick={() => setIsPurchaseOpen(false)}>
+          <div className="search-modal purchase-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="search-header">
+              <h2>Choose a format</h2>
+              <button
+                type="button"
+                className="search-close"
+                onClick={() => setIsPurchaseOpen(false)}
+                aria-label="Close purchase options"
+              >
+                <ChevronLeft size={20} />
+              </button>
+            </div>
+
+            <div className="purchase-options">
+              {bookFormats.length > 0 ? (
+                bookFormats.map((format) => (
+                  <button
+                    key={format.id}
+                    type="button"
+                    className="purchase-option"
+                    onClick={() => void purchaseBook(format)}
+                    disabled={checkoutLoading}
+                  >
+                    <span>{format.type === 'ebook' ? 'Ebook' : 'Physical'}</span>
+                    <strong>{Number(format.price).toLocaleString()}</strong>
+                  </button>
+                ))
+              ) : (
+                <p className="search-status">No active purchase formats are available.</p>
+              )}
+            </div>
+          </div>
         </div>
       ) : null}
     </article>

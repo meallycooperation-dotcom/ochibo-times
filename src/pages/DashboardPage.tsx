@@ -5,11 +5,13 @@ import {
   BookOpen,
   FileText,
   Home,
+  MapPin,
   LogOut,
   PencilLine,
   PlusCircle,
   Save,
   Settings2,
+  ShoppingBag,
   Trash2,
   UserRound,
 } from 'lucide-react'
@@ -35,10 +37,22 @@ import {
   upsertCachedPost,
 } from '../lib/cache'
 import { BooksEditor } from './BooksEditor'
+import { LocationsPage } from './LocationsPage'
 import { DraftsPage } from './DraftsPage'
+import { ProductsPage } from './ProductsPage'
 import { SentWorkPage } from './SentWorkPage'
 
-type Tab = 'posts' | 'new-post' | 'books' | 'new-book' | 'analytics' | 'drafts' | 'sent-work' | 'profile'
+type Tab =
+  | 'posts'
+  | 'new-post'
+  | 'books'
+  | 'new-book'
+  | 'products'
+  | 'locations'
+  | 'analytics'
+  | 'drafts'
+  | 'sent-work'
+  | 'profile'
 
 type PostFormState = {
   id: string
@@ -653,6 +667,14 @@ export function DashboardPage() {
           <PlusCircle size={16} />
           New book
         </button>
+        <button className={activeTab === 'products' ? 'sidebar-item active' : 'sidebar-item'} onClick={() => setActiveTab('products')}>
+          <ShoppingBag size={16} />
+          Products
+        </button>
+        <button className={activeTab === 'locations' ? 'sidebar-item active' : 'sidebar-item'} onClick={() => setActiveTab('locations')}>
+          <MapPin size={16} />
+          Locations
+        </button>
         <button className={activeTab === 'analytics' ? 'sidebar-item active' : 'sidebar-item'} onClick={() => setActiveTab('analytics')}>
           <BarChart3 size={16} />
           Analytics
@@ -942,6 +964,10 @@ export function DashboardPage() {
             }}
           />
         ) : null}
+
+        {activeTab === 'products' ? <ProductsPage /> : null}
+
+        {activeTab === 'locations' ? <LocationsPage sessionUserId={sessionUserId} /> : null}
 
         {activeTab === 'analytics' ? (
           <section className="panel">

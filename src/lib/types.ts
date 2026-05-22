@@ -44,6 +44,17 @@ export interface Book {
   updated_at: string | null
 }
 
+export interface BookFormat {
+  id: string
+  book_id: string | null
+  type: 'ebook' | 'physical' | null
+  price: number
+  stock: number | null
+  ebook_file_url: string | null
+  active: boolean | null
+  created_at: string
+}
+
 export interface BookChapter {
   id: string
   book_id: string

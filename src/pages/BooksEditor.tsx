@@ -1,7 +1,7 @@
 import { useState, useEffect, type FormEvent } from 'react'
 import { ArrowLeft, Plus, Save, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import type { Book, BookChapter, Draft } from '../lib/types'
+import type { Book, BookChapter, BookFormat, Draft } from '../lib/types'
 import {
   getCachedBookChapters,
   getLatestCachedDraft,
@@ -21,6 +21,7 @@ type BookFormState = {
   slug: string
   description: string
   cover_image: string
+  price: string
   published: boolean
 }
 
@@ -40,6 +41,7 @@ const emptyBookForm: BookFormState = {
   slug: '',
   description: '',
   cover_image: '',
+  price: '',
   published: true,
 }
 
@@ -63,6 +65,7 @@ function slugify(value: string) {
 type BookDraftSnapshot = {
   slug: string
   description: string
+  price: string
   chapters: ChapterFormState[]
 }
 
@@ -77,7 +80,7 @@ function sanitizeFileName(value: string) {
 
 function parseBookDraftContent(raw: string | null): BookDraftSnapshot {
   if (!raw) {
-    return { slug: '', description: '', chapters: [] }
+    return { slug: '', description: '', price: '', chapters: [] }
   }
 
   try {
@@ -85,6 +88,7 @@ function parseBookDraftContent(raw: string | null): BookDraftSnapshot {
     return {
       slug: typeof parsed.slug === 'string' ? parsed.slug : '',
       description: typeof parsed.description === 'string' ? parsed.description : '',
+      price: typeof parsed.price === 'string' ? parsed.price : '',
       chapters: Array.isArray(parsed.chapters)
         ? parsed.chapters
             .map((chapter) => ({
@@ -100,7 +104,7 @@ function parseBookDraftContent(raw: string | null): BookDraftSnapshot {
         : [],
     }
   } catch {
-    return { slug: '', description: raw, chapters: [] }
+    return { slug: '', description: raw, price: '', chapters: [] }
   }
 }
 
@@ -108,6 +112,7 @@ function buildBookDraftContent(bookForm: BookFormState, chapters: ChapterFormSta
   return JSON.stringify({
     slug: bookForm.slug || slugify(bookForm.title),
     description: bookForm.description,
+    price: bookForm.price,
     chapters: chapters.map((chapter) => ({
       id: chapter.id,
       title: chapter.title,
@@ -156,6 +161,7 @@ export function BooksEditor({ sessionUserId, editingBook, draftSeed, onDraftCons
   const [savingDraft, setSavingDraft] = useState(false)
   const [draftId, setDraftId] = useState<string | null>(null)
   const [draftLoaded, setDraftLoaded] = useState(false)
+  const [bookFormatId, setBookFormatId] = useState<string | null>(null)
 
   useEffect(() => {
     if (editingBook) {
@@ -168,11 +174,32 @@ export function BooksEditor({ sessionUserId, editingBook, draftSeed, onDraftCons
         slug: book.slug,
         description: book.description ?? '',
         cover_image: book.cover_image ?? '',
+        price: '',
         published: book.published,
       })
+      void (async () => {
+        const { data: bookFormat } = await supabase
+          .from('book_formats')
+          .select('id, price')
+          .eq('book_id', book.id)
+          .eq('type', 'ebook')
+          .maybeSingle()
+
+        if (bookFormat) {
+          const format = bookFormat as BookFormat
+          setBookFormatId(format.id)
+          setBookForm((current) => ({
+            ...current,
+            price: String(format.price ?? ''),
+          }))
+        } else {
+          setBookFormatId(null)
+        }
+      })()
     } else {
       setBookForm(emptyBookForm)
       setDraftLoaded(false)
+      setBookFormatId(null)
     }
   }, [editingBook])
 
@@ -235,6 +262,7 @@ export function BooksEditor({ sessionUserId, editingBook, draftSeed, onDraftCons
           slug: snapshot.slug || slugify(draft.title),
           description: draft.excerpt ?? snapshot.description,
           cover_image: draft.cover_image ?? '',
+          price: snapshot.price,
           published: true,
         })
         if (snapshot.chapters.length > 0) {
@@ -280,6 +308,7 @@ export function BooksEditor({ sessionUserId, editingBook, draftSeed, onDraftCons
       slug: snapshot.slug || slugify(draftSeed.title),
       description: draftSeed.excerpt ?? snapshot.description,
       cover_image: draftSeed.cover_image ?? '',
+      price: snapshot.price,
       published: true,
     })
     if (snapshot.chapters.length > 0) {
@@ -447,6 +476,53 @@ export function BooksEditor({ sessionUserId, editingBook, draftSeed, onDraftCons
         await upsertCachedBook(bookData as Book)
       }
 
+      let resolvedBookFormatId = bookFormatId
+      if (editingBook && !resolvedBookFormatId) {
+        const { data: existingFormat } = await supabase
+          .from('book_formats')
+          .select('id')
+          .eq('book_id', bookId)
+          .eq('type', 'ebook')
+          .maybeSingle()
+
+        if (existingFormat) {
+          resolvedBookFormatId = (existingFormat as BookFormat).id
+        }
+      }
+
+      const ebookFormatPayload = {
+        book_id: bookId,
+        type: 'ebook' as const,
+        price: Number(bookForm.price) || 0,
+        stock: null,
+        ebook_file_url: null,
+        active: true,
+      }
+
+      if (resolvedBookFormatId) {
+        const { error: formatError } = await supabase
+          .from('book_formats')
+          .update(ebookFormatPayload)
+          .eq('id', resolvedBookFormatId)
+        if (formatError) {
+          setStatusMessage('Book saved but price failed: ' + formatError.message)
+          return
+        }
+      } else {
+        const { data: formatData, error: formatError } = await supabase
+          .from('book_formats')
+          .insert(ebookFormatPayload)
+          .select('id')
+          .single()
+
+        if (formatError) {
+          setStatusMessage('Book saved but price failed: ' + formatError.message)
+          return
+        }
+
+        setBookFormatId((formatData as BookFormat).id)
+      }
+
       if (editingBook) {
         await supabase.from('book_chapters').delete().eq('book_id', bookId)
       }
@@ -575,6 +651,18 @@ export function BooksEditor({ sessionUserId, editingBook, draftSeed, onDraftCons
             onChange={(event) =>
               setBookForm((current) => ({ ...current, cover_image: event.target.value }))
             }
+          />
+        </label>
+
+        <label>
+          Price
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={bookForm.price}
+            onChange={(event) => setBookForm((current) => ({ ...current, price: event.target.value }))}
+            placeholder="0.00"
           />
         </label>
 

@@ -1,7 +1,17 @@
 import type { ReactNode } from 'react'
 import { useEffect, useState, useRef } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { ArrowRight, BookOpen, Home, LayoutDashboard, Search, User, X } from 'lucide-react'
+import {
+  ArrowRight,
+  BookOpen,
+  Home,
+  LayoutDashboard,
+  Search,
+  ShoppingBag,
+  ShoppingCart,
+  User,
+  X,
+} from 'lucide-react'
 import { getCurrentSession, getProfileById } from '../lib/auth'
 import {
   getCachedBooks,
@@ -10,6 +20,7 @@ import {
   syncBlogPosts,
   warmContentCache,
 } from '../lib/cache'
+import { useCart } from '../context/CartContext'
 import { useSearchContext } from '../context/SearchContext'
 
 type SearchResult = {
@@ -40,6 +51,7 @@ export function SiteLayout() {
   const [searching, setSearching] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const { categoryFilter, setCategoryFilter } = useSearchContext()
+  const { itemCount } = useCart()
   const hideHeaderForAudioPage = location.pathname.startsWith('/book/') && location.pathname.endsWith('/audio')
 
   useEffect(() => {
@@ -172,6 +184,15 @@ export function SiteLayout() {
               Home
             </NavLink>
             <NavLink to="/donate">Donate</NavLink>
+            <NavLink to="/merchandise">
+              <ShoppingBag size={16} />
+              Merchandise
+            </NavLink>
+            <NavLink to="/cart" className="cart-link">
+              <ShoppingCart size={16} />
+              Cart
+              {itemCount > 0 ? <span className="cart-count">{itemCount}</span> : null}
+            </NavLink>
             <button className="nav-search-btn" onClick={() => setSearchOpen(true)} aria-label="Search">
               <Search size={16} />
               Search
